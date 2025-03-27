@@ -17,11 +17,11 @@ let gemini = null;
 if (GOOGLE_AI_STUDIO_API_KEY) {
   try {
     const genAI = new GoogleGenerativeAI(GOOGLE_AI_STUDIO_API_KEY);
-    // Revert to gemini-pro for text-based chat
-    gemini = genAI.getGenerativeModel({ model: "gemini-pro" });
-    console.log("Gemini Pro model initialized for chat.");
+    // Switch back to gemini-2.0-flash for multimodal capabilities
+    gemini = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    console.log("Gemini gemini-2.0-flash Flash model initialized for chat.");
   } catch (e) {
-    console.error("Failed to initialize Gemini Pro model for chat:", e);
+    console.error("Failed to initialize Gemini gemini-2.0-flash Flash model for chat:", e);
   }
 } else {
   console.warn("GOOGLE_AI_STUDIO_API_KEY not set. Chat functionality will be disabled.");
@@ -63,54 +63,55 @@ export async function POST(request, context) { // Use context
       return NextResponse.json({ message: 'Project not found or forbidden' }, { status: 404 });
     }
 
-    // Fetch diagrams for context, including OCR text
-    const diagrams = await Diagram.find({ project: projectId }).select('fileName ocrText extractedData'); // Fetch OCR text again
+    // Fetch diagrams for context, specifically the Gemini File URIs
+    const diagrams = await Diagram.find({ project: projectId }).select('fileName geminiFileUri');
 
-    // --- Construct Text Context ---
-    let diagramContext = "Context from Project Diagrams:\n";
-    if (diagrams.length > 0) {
-        diagrams.forEach(diag => {
-            diagramContext += `--- Diagram: ${diag.fileName} ---\n`;
-            if (diag.ocrText) {
-                diagramContext += `OCR Text:\n${diag.ocrText.substring(0, 1500)}...\n`; // Limit context size per diagram
-            } else {
-                diagramContext += "(No OCR text available)\n";
-            }
-            // Optionally include summary if helpful and available
-            // if (diag.extractedData) {
-            //      diagramContext += `AI Summary:\n${JSON.stringify(diag.extractedData).substring(0, 500)}...\n`;
-            // }
-            diagramContext += "---\n";
-        });
-    } else {
-        diagramContext += "No diagrams found for this project.\n";
+    // Filter out diagrams that haven't been uploaded to Gemini successfully or are not ACTIVE
+    // Note: The 'prepare' endpoint should ideally update the status after waiting.
+    const validDiagrams = diagrams.filter(d => d.geminiFileUri); // Add status check if available
+
+    if (validDiagrams.length === 0) {
+        // Consider checking diagram statuses if available and providing a more specific message
+        return NextResponse.json({ response: "No diagrams ready for chat in this project. Please ensure files were uploaded and processed." }, { status: 200 });
     }
+
+    // --- Construct Parts Array for Gemini ---
+    const fileParts = validDiagrams.map(diag => ({
+        file_data: { // Use file_data
+            mime_type: mime.lookup(diag.fileName) || 'application/octet-stream', // Use mime_type
+            file_uri: diag.geminiFileUri // Use file_uri
+        }
+    }));
 
     // Basic chat history formatting (needs improvement for robust conversation)
     // Gemini expects history in a specific format: [{ role: "user", parts: [{ text: "..." }] }, { role: "model", parts: [{ text: "..." }] }]
     const formattedHistory = (history || []).map(entry => ({
         role: entry.role, // 'user' or 'model'
         parts: [{ text: entry.text }] // Assuming simple text parts for history
-        // Removed duplicate line below
     }));
 
-    // Construct the prompt string including context and history
-    const prompt = `You are an AI assistant specialized in analyzing engineering diagrams for project "${project.name}".
-Use the following context extracted from the project's diagrams to answer the user's question accurately and concisely. If the information isn't in the context, say so.
+    // Combine file parts, history, and the new message
+    const contents = [
+        ...formattedHistory, // Add past messages first
+        {
+            role: "user",
+            parts: [
+                ...fileParts, // Add all file references
+                { text: `Based on the provided diagram(s) (${validDiagrams.map(d => d.fileName).join(', ')}), answer the following question: ${message}` } // Add the user's question
+            ]
+        }
+    ];
 
-${diagramContext}
+    console.log("Sending content to Gemini gemini-2.0-flash Flash...");
+    // console.log("Content:", JSON.stringify(contents, null, 2)); // For debugging
 
-Chat History:
-${formattedHistory.map(h => `${h.role}: ${h.parts[0].text}`).join('\n')}
-
-Current User Question: ${message}`;
-
-
-    console.log("Sending prompt to Gemini Pro...");
-    // console.log("Prompt:", prompt); // For debugging
-
-    // Use generateContent for text-only model
-    const result = await gemini.generateContent(prompt); // Send the full prompt string
+    // Use generateContent for multimodal model
+    const result = await gemini.generateContent({
+        contents: contents,
+        generationConfig: {
+            maxOutputTokens: 1000, // Adjust token limit as needed
+        },
+    });
     const response = result.response;
     const aiResponseText = response.text();
 

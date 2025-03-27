@@ -132,7 +132,7 @@ export default function FileUpload({ projectId }) { // Accept projectId as prop
           <p className="text-lg font-semibold">Drop the file here ...</p>
         ) : (
           <div>
-            <p className="text-lg font-semibold mb-2">Drag 'n' drop diagram file here, or click to select</p>
+            <p className="text-lg font-semibold mb-2">Drag {'\''}n{'\''} drop diagram file here, or click to select</p>
             <p className="text-sm">Supported formats: PDF, PNG, JPG, DWG, DXF</p>
           </div>
         )}
