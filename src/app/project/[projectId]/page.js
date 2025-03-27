@@ -161,11 +161,15 @@ export default function ProjectDetailPage() {
           <div>
             <h2 className="text-xl font-semibold mb-3 text-white">Project Reports</h2>
             <div className="flex flex-col space-y-2">
-              <button onClick={handleDownloadCombinedReport} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded text-sm">
-                Download Combined Report (PDF)
+              {/* TODO: Implement actual download logic */}
+              <button onClick={() => alert('OCR Download TBD')} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded text-sm">
+                OCR Download
               </button>
-              <button onClick={handleDownloadCostReport} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded text-sm">
-                Download Cost Estimate (PDF)
+              <button onClick={() => alert('BoM Download TBD')} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded text-sm">
+                BoM Download
+              </button>
+              <button onClick={() => alert('Compliance Download TBD')} className="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded text-sm">
+                Compliance Download
               </button>
             </div>
           </div>
