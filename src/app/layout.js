@@ -12,9 +12,9 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <AuthProvider>
-          <div className="flex h-screen bg-gray-900 text-white"> {/* Moved base theme here */}
+          <div className="flex h-screen bg-gray-900 text-white overflow-hidden"> {/* Moved base theme here, added overflow-hidden */}
             <Sidebar /> {/* Sidebar will handle its own visibility based on auth */}
-            <main className="flex-grow overflow-y-auto"> {/* Main content area */}
+            <main className="flex-grow flex flex-col"> {/* Main content area - ADDED flex flex-col */}
               {children}
             </main>
           </div>

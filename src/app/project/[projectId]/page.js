@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // Import useRef
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -20,7 +20,9 @@ export default function ProjectDetailPage() {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false); // Chat API call loading
   const [chatError, setChatError] = useState(''); // Chat API call error
+  const chatContainerRef = useRef(null); // Ref for chat history container
 
+  // Effect for fetching project data
   useEffect(() => {
     if (status === 'loading') return;
     if (status === 'unauthenticated') {
@@ -63,6 +65,13 @@ export default function ProjectDetailPage() {
       fetchData();
     }
   }, [projectId, status, router]);
+
+  // Effect for auto-scrolling chat
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatHistory]); // Run whenever chatHistory changes
 
   const handleDownloadCombinedReport = () => alert('Combined report download TBD');
   const handleDownloadCostReport = () => alert('Cost report download TBD');
@@ -164,9 +173,10 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Right Column: Chat Interface */}
-      <div className="w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col">
+      <div className="w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col overflow-hidden"> {/* Constrain height */}
         <h2 className="text-2xl font-semibold mb-4 text-white">Contextual Chat</h2>
-        <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col">
+        {/* Inner container: fills space, manages children, hides overflow */}
+        <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col overflow-hidden"> 
           {preparationStatus === 'loading' ? (
              <div className="flex-grow flex items-center justify-center">
                <LoadingSpinner text="Preparing documents for chat..." />
@@ -176,15 +186,20 @@ export default function ProjectDetailPage() {
                <LoadingSpinner text="Documents are processing, please wait..." />
              </div>
           ) : preparationStatus === 'failed' ? (
-             <p className="text-red-500 text-center flex-grow flex items-center justify-center">Failed to prepare some documents for chat. Please try reloading or check uploaded files.</p>
+             <p className="text-red-500 text-center flex-grow flex items-center justify-center">
+               Failed to prepare some documents for chat. Please try reloading or check uploaded files.
+             </p>
           ) : preparationStatus === 'no_files' ? (
-             <p className="text-gray-400 text-center flex-grow flex items-center justify-center">Upload diagrams to enable contextual chat.</p>
+             <p className="text-gray-400 text-center flex-grow flex items-center justify-center">
+               Upload diagrams to enable contextual chat.
+             </p>
           ) : preparationStatus === 'ready' ? (
             <React.Fragment>
-              <div className="flex-grow overflow-y-auto mb-4 space-y-4 pr-2">
+              {/* Chat History: grows and scrolls */}
+              <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2"> 
                 {chatHistory.map((msg, index) => (
                   <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`p-3 rounded-lg max-w-lg prose prose-invert ${ // Added prose classes for basic styling
+                    <div className={`p-3 rounded-lg max-w-lg prose prose-invert ${
                       msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'
                     }`}>
                       {msg.role === 'model' ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
@@ -198,9 +213,10 @@ export default function ProjectDetailPage() {
                      </div>
                    </div>
                  )}
-                 {chatError && <p className="text-red-500 text-sm">Error: {chatError}</p>}
+                 {chatError && <p className="text-red-500 text-sm">Error: {chatError}</p>} 
               </div>
-              <div className="mt-auto flex">
+              {/* Chat Input: fixed at bottom */}
+              <div className="mt-auto flex pt-4"> {/* Added pt-4 for spacing */}
                 <textarea
                   className="flex-grow p-2 bg-gray-700 rounded-l border border-gray-600 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-70"
                   placeholder="Ask questions about the diagrams..."
