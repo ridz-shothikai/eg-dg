@@ -12,12 +12,13 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const [project, setProject] = useState(null);
   const [diagrams, setDiagrams] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [chatHistory, setChatHistory] = useState([]); // { role: 'user' | 'model', text: string }[]
+  const [loading, setLoading] = useState(true); // Overall page loading
+  const [error, setError] = useState(null); // Page loading error
+  const [preparationStatus, setPreparationStatus] = useState('loading'); // 'loading', 'processing', 'ready', 'failed', 'no_files'
+  const [chatHistory, setChatHistory] = useState([]);
   const [chatInput, setChatInput] = useState('');
-  const [isChatLoading, setIsChatLoading] = useState(false);
-  const [chatError, setChatError] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false); // Chat API call loading
+  const [chatError, setChatError] = useState(''); // Chat API call error
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -32,8 +33,8 @@ export default function ProjectDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        // Fetch Project Details, Diagrams, and Chat History from Prepare API
-        const response = await fetch(`/api/projects/${projectId}/prepare`); // Call prepare endpoint
+        setPreparationStatus('loading'); // Reset status on fetch
+        const response = await fetch(`/api/projects/${projectId}/prepare`);
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -45,10 +46,12 @@ export default function ProjectDetailPage() {
         const data = await response.json();
         setProject(data.project);
         setDiagrams(data.diagrams || []);
-        setChatHistory(data.chatHistory || []); // Set initial chat history
+        setChatHistory(data.chatHistory || []);
+        setPreparationStatus(data.preparationStatus || 'failed');
 
       } catch (err) {
         console.error('Error preparing project data:', err);
+        setPreparationStatus('failed');
         setError(err.message);
       } finally {
         setLoading(false);
@@ -58,15 +61,13 @@ export default function ProjectDetailPage() {
     if (status === 'authenticated') {
       fetchData();
     }
-  }, [projectId, status, router]); // Dependencies
+  }, [projectId, status, router]);
 
-  // Placeholder handlers for report downloads
   const handleDownloadCombinedReport = () => alert('Combined report download TBD');
   const handleDownloadCostReport = () => alert('Cost report download TBD');
 
-  // Chat message handler
   const handleSendMessage = async () => {
-    if (!chatInput.trim() || isChatLoading) return;
+    if (!chatInput.trim() || isChatLoading || preparationStatus !== 'ready') return;
 
     const newMessage = { role: 'user', text: chatInput };
     const currentHistory = [...chatHistory, newMessage];
@@ -79,7 +80,6 @@ export default function ProjectDetailPage() {
       const response = await fetch(`/api/chat/${projectId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Send limited history for context, adjust as needed
         body: JSON.stringify({ message: newMessage.text, history: chatHistory.slice(-6) }),
       });
 
@@ -94,13 +94,10 @@ export default function ProjectDetailPage() {
     } catch (err) {
       console.error('Chat error:', err);
       setChatError(err.message);
-      // Optionally remove the user's message if the API call failed
-      // setChatHistory(chatHistory);
     } finally {
       setIsChatLoading(false);
     }
   };
-
 
   if (loading || status === 'loading') {
     return (
@@ -110,17 +107,17 @@ export default function ProjectDetailPage() {
     );
   }
 
-  if (error) {
-    return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Error: {error}</div>;
+  if (error && preparationStatus === 'failed') { // Show specific error if preparation failed
+    return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Error loading project data: {error}</div>;
   }
 
   if (!project) {
-    return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Project not found.</div>;
+     // This might happen briefly or if fetch fails without specific error message
+    return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Project data unavailable.</div>;
   }
 
   return (
-    <div className="flex flex-col md:flex-row h-full"> {/* Main container: flex row on medium+ screens */}
-
+    <div className="flex flex-col md:flex-row h-full">
       {/* Left Column: Files & Reports */}
       <div className="w-full md:w-1/3 lg:w-1/4 p-4 border-r border-gray-700 flex flex-col space-y-6 overflow-y-auto">
         <div>
@@ -136,7 +133,6 @@ export default function ProjectDetailPage() {
                 <li key={diagram._id} className="bg-gray-700 p-3 rounded">
                   <p className="font-medium truncate text-sm mb-1" title={diagram.fileName}>{diagram.fileName}</p>
                   <p className="text-xs text-gray-400 mb-2">{new Date(diagram.createdAt).toLocaleDateString()}</p>
-                  {/* Add issue badge placeholder */}
                   <div className="flex justify-end space-x-2 mt-1">
                     <button className="text-xs text-blue-400 hover:text-blue-300">Download</button>
                     <Link href={`/ocr/${diagram._id}`}><span className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer">OCR</span></Link>
@@ -167,13 +163,24 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Right Column: Chat Interface */}
-      <div className="w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col"> {/* Takes remaining space */}
+      <div className="w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col">
         <h2 className="text-2xl font-semibold mb-4 text-white">Contextual Chat</h2>
         <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col">
-          {diagrams.length > 0 ? (
+          {preparationStatus === 'loading' ? (
+             <div className="flex-grow flex items-center justify-center">
+               <LoadingSpinner text="Preparing documents for chat..." />
+             </div>
+          ) : preparationStatus === 'processing' ? (
+             <div className="flex-grow flex items-center justify-center text-yellow-400">
+               <LoadingSpinner text="Documents are processing, please wait..." />
+             </div>
+          ) : preparationStatus === 'failed' ? (
+             <p className="text-red-500 text-center flex-grow flex items-center justify-center">Failed to prepare some documents for chat. Please try reloading or check uploaded files.</p>
+          ) : preparationStatus === 'no_files' ? (
+             <p className="text-gray-400 text-center flex-grow flex items-center justify-center">Upload diagrams to enable contextual chat.</p>
+          ) : preparationStatus === 'ready' ? (
             <React.Fragment>
               <div className="flex-grow overflow-y-auto mb-4 space-y-4 pr-2">
-                {/* Display Chat Messages */}
                 {chatHistory.map((msg, index) => (
                   <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`p-3 rounded-lg max-w-lg ${
@@ -200,20 +207,18 @@ export default function ProjectDetailPage() {
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                  disabled={isChatLoading}
+                  disabled={isChatLoading || preparationStatus !== 'ready'} // Also disable if not ready
                 ></textarea>
                 <button
                   className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-2 rounded-r disabled:opacity-50"
                   onClick={handleSendMessage}
-                  disabled={isChatLoading || !chatInput.trim()}
+                  disabled={isChatLoading || !chatInput.trim() || preparationStatus !== 'ready'}
                 >
                   Send
                 </button>
               </div>
             </React.Fragment>
-          ) : (
-            <p className="text-gray-400 text-center">Upload diagrams to enable contextual chat.</p>
-          )}
+          ) : null }
         </div>
       </div>
     </div>

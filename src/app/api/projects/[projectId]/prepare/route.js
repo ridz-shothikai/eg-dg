@@ -65,29 +65,49 @@ async function uploadToGemini(filePath, displayName) {
 // --- Helper: Wait for Gemini Files Active ---
 async function waitForFilesActive(files) {
   if (!fileManager) return; // Skip if no file manager
-  console.log("Waiting for Gemini file processing...");
+  if (!files || files.length === 0) return []; // No files to wait for
+
+  console.log(`Waiting for ${files.length} Gemini file(s) processing...`);
+  const finalStatuses = [];
+
   for (const file of files) {
-    if (!file || !file.name) continue; // Skip if file object is invalid
-    let currentFileState = file.state;
-    while (currentFileState === "PROCESSING") {
+    if (!file || !file.name) {
+        console.warn("Skipping invalid file object in waitForFilesActive.");
+        continue;
+    };
+
+    let currentFile = file; // Start with the file object we have
+    let attempts = 0;
+    const maxAttempts = 12; // Wait up to 60 seconds (12 * 5s)
+
+    console.log(` -> Checking ${currentFile.name} (Initial state: ${currentFile.state})`);
+    while (currentFile.state === "PROCESSING" && attempts < maxAttempts) {
+      attempts++;
       process.stdout.write(".");
       await new Promise((resolve) => setTimeout(resolve, 5000)); // Poll every 5 seconds
       try {
-        const updatedFile = await fileManager.getFile(file.name);
-        currentFileState = updatedFile.state;
+        currentFile = await fileManager.getFile(file.name); // Fetch latest state
+        console.log(`\n -> Fetched state for ${currentFile.name}: ${currentFile.state} (Attempt ${attempts})`);
       } catch (error) {
-         console.error(`Error fetching file state for ${file.name}:`, error);
-         // Decide how to handle: maybe throw, maybe mark as failed
-         currentFileState = "FAILED"; // Assume failure on error
+         console.error(`\nError fetching file state for ${file.name} (Attempt ${attempts}):`, error);
+         currentFile = { ...currentFile, state: "FAILED" }; // Assume failure on error
+         break; // Stop polling on error
       }
     }
-    if (currentFileState !== "ACTIVE") {
-      console.warn(`File ${file.name} failed to process or has state ${currentFileState}.`);
-      // Optionally update DB status here
-    }
+
+     if (currentFile.state !== "ACTIVE") {
+       console.warn(`\nFile ${currentFile.name} did not become ACTIVE. Final state: ${currentFile.state}`);
+     } else {
+       console.log(`\nFile ${currentFile.name} is ACTIVE.`);
+     }
+     finalStatuses.push({ id: file.id || diagramIdMap[file.name], name: file.name, status: currentFile.state }); // Use map if needed
   }
   console.log("...file processing check complete.\n");
+  return finalStatuses; // Return array of { id, name, status }
 }
+
+// Map original diagram ID to Gemini file name for status update
+let diagramIdMap = {};
 
 
 import { URL } from 'url'; // Import URL for parsing
@@ -183,30 +203,72 @@ export async function GET(request, context) { // Keep context for potential futu
       }
     }
 
-    // 4. Wait for any processing Gemini files
-    await waitForFilesActive(geminiFileObjects);
+    // Build a map from gemini file name back to diagram ID for status updates
+    diagramIdMap = diagramsData.reduce((map, diag) => {
+        if (diag.geminiFileUri) {
+            map[diag.geminiFileUri] = diag._id;
+        }
+        return map;
+    }, {});
 
-    // 5. Update Diagram documents in DB with new URIs/statuses
-    if (updatedDiagrams.length > 0) {
-        console.log("Updating diagram records in DB...");
-        const bulkOps = updatedDiagrams.map(update => ({
+
+    // 4. Wait for any processing Gemini files and get their final statuses
+    const finalStatuses = await waitForFilesActive(geminiFileObjects);
+
+    // 5. Update Diagram documents in DB with new URIs and FINAL statuses
+    const updatesToApply = [...updatedDiagrams]; // Start with uploads
+    // Add statuses from polling results
+    finalStatuses.forEach(fs => {
+        // Find if this file was newly uploaded or just polled
+        const existingUpdateIndex = updatesToApply.findIndex(u => u.uri === fs.name);
+        if (existingUpdateIndex !== -1) {
+            // Update the status from polling result
+            updatesToApply[existingUpdateIndex].status = fs.status;
+        } else {
+            // This file was polled but not newly uploaded, add its status update
+            const diagramId = diagramsData.find(d => d.geminiFileUri === fs.name)?._id;
+            if (diagramId) {
+                 updatesToApply.push({ id: diagramId, uri: fs.name, status: fs.status });
+            }
+        }
+    });
+
+
+    if (updatesToApply.length > 0) {
+        console.log("Updating diagram records in DB with final statuses...");
+        const bulkOps = updatesToApply.map(update => ({
             updateOne: {
                 filter: { _id: update.id },
+                // Only update status if it's different? Maybe not, just set it.
                 update: { $set: { geminiFileUri: update.uri, processingStatus: update.status } }
             }
         }));
         await Diagram.bulkWrite(bulkOps);
         console.log("Diagram records updated.");
-        // Refetch diagrams to ensure the response has the latest URIs
+        // Refetch diagrams to get the final confirmed state
         diagramsData = await Diagram.find({ project: projectId }).sort({ createdAt: -1 });
     }
 
+    // 6. Determine overall preparation status
+    let overallStatus = 'ready';
+    if (diagramsData.length === 0) {
+        overallStatus = 'no_files';
+    } else if (diagramsData.some(d => d.processingStatus === 'PROCESSING')) {
+        overallStatus = 'processing';
+    } else if (diagramsData.some(d => d.processingStatus === 'FAILED' || !d.geminiFileUri)) {
+        overallStatus = 'failed'; // If any failed or are missing URI after prepare
+    } else if (!diagramsData.every(d => d.processingStatus === 'ACTIVE')) {
+         overallStatus = 'processing'; // If not all are active yet, consider it processing
+    }
 
-    // 6. Return project, updated diagrams, and chat history
+
+    // 7. Return project, updated diagrams, chat history, and overall status
+    console.log(`Prepare endpoint finished with overall status: ${overallStatus}`);
     return NextResponse.json({
-        project: { _id: projectData._id, name: projectData.name, description: projectData.description }, // Send necessary project fields
-        diagrams: diagramsData, // Send updated diagram data
-        chatHistory: projectData.chatHistory || [] // Send chat history
+        project: { _id: projectData._id, name: projectData.name, description: projectData.description },
+        diagrams: diagramsData,
+        chatHistory: projectData.chatHistory || [],
+        preparationStatus: overallStatus // 'ready', 'processing', 'failed', 'no_files'
     }, { status: 200 });
 
   } catch (error) {
