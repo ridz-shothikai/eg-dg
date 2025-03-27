@@ -116,7 +116,7 @@ export default function FileUpload({ projectId }) { // Accept projectId as prop
       'application/acad': ['.dwg'], // Alternative
       'application/dxf': ['.dxf']   // Alternative
     },
-    maxFiles: 1 // Limit to single file upload for now
+    // maxFiles: 1 // Allow multiple files
   });
 
   return (
@@ -164,12 +164,14 @@ export default function FileUpload({ projectId }) { // Accept projectId as prop
       {/* Display uploaded file list */}
       {uploadedFiles.length > 0 && !uploading && !uploadSuccess && (
         <div className="mt-6">
-          <h3 className="text-lg font-semibold mb-2 text-white">File to Upload:</h3>
+          <h3 className="text-lg font-semibold mb-2 text-white">Files to Upload:</h3>
           <ul className="list-disc list-inside text-gray-300 space-y-1">
             {uploadedFiles.map((file, index) => (
               <li key={index}>{file.name} - {Math.round(file.size / 1024)} KB</li>
             ))}
           </ul>
+          {/* Add a button to trigger upload for all files later */}
+          <p className="text-sm text-yellow-500 mt-2">Note: Currently only the first file selected will be uploaded.</p>
         </div>
       )}
     </div>

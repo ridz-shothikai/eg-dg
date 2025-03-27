@@ -11,6 +11,11 @@ const DiagramSchema = new mongoose.Schema({
     required: [true, 'Storage path is required.'],
     unique: true,
   },
+  // URI for the file uploaded to Gemini File API
+  geminiFileUri: {
+    type: String,
+    // Not necessarily unique, could be re-uploaded
+  },
   fileType: {
     type: String, // e.g., 'pdf', 'png', 'dwg'
     required: true,

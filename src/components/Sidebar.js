@@ -81,7 +81,7 @@ export default function Sidebar() {
         {/* Dashboard Link */}
         <Link href="/" className="mb-4">
           <span className="block text-center font-semibold p-2 rounded hover:bg-[#130830] cursor-pointer">
-            Dashboard
+            Eng Diagram Insight
           </span>
         </Link>
         <h2 className="text-xl font-semibold mb-4">Projects</h2>

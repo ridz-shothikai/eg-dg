@@ -35,6 +35,14 @@ const ProjectSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  // Store chat history for the project
+  chatHistory: [
+    {
+      role: { type: String, enum: ['user', 'model'], required: true },
+      text: { type: String, required: true },
+      timestamp: { type: Date, default: Date.now }
+    }
+  ]
 });
 
 // Middleware to update `updatedAt` field before saving

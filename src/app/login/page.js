@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation'; // Use next/navigation for App Router
+import Link from 'next/link'; // Import Link
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -65,8 +66,8 @@ export default function LoginPage() {
         setError(result.error === 'CredentialsSignin' ? 'Invalid email or password' : 'Login failed. Please try again.');
         console.error("Login Error:", result.error);
       } else if (result?.ok) {
-        // Redirect to dashboard on successful login
-        router.push('/dashboard');
+        // Redirect to root page (which acts as dashboard) on successful login
+        router.push('/');
       } else {
          setError('An unexpected error occurred during login.');
       }
@@ -128,9 +129,9 @@ export default function LoginPage() {
           </div>
         )}
         <div className="mt-6 text-center">
-          <a href="/signup" className="text-indigo-400 hover:text-indigo-300">
+          <Link href="/signup" className="text-indigo-400 hover:text-indigo-300">
             Don't have an account? Sign Up
-          </a>
+          </Link>
         </div>
       </div>
     </div>

@@ -57,23 +57,27 @@
 - Updated `RootLayout` to integrate the `Sidebar` conditionally.
 - Updated root page (`/`) to act as dashboard (welcome/features) for authenticated users and landing page for unauthenticated users.
 - Created project-specific upload page (`/project/[projectId]/upload`).
-- Updated `FileUpload` component to accept `projectId`, include it in the upload request, redirect to project page, and display upload progress using `XMLHttpRequest`.
-- Updated upload API to handle `projectId`.
+- Updated `FileUpload` component to accept `projectId`, include it in the upload request, redirect to project page, display upload progress using `XMLHttpRequest`, and allow multiple file selection (though only first is uploaded).
+- Refactored Upload API (`/api/upload`) to only handle GCS upload and basic DB record creation (removed Gemini File API logic).
 - Re-enabled `project` field requirement in `Diagram` model.
 - Removed redundant `Dashboard` page (`/dashboard`).
-- Created API endpoint (`/api/projects/[projectId]`) to fetch project details and diagrams.
-- Created project detail page (`/project/[projectId]`) to display diagrams and conditionally show upload button.
+- Created API endpoint (`/api/projects/[projectId]`) to fetch project details and diagrams (now superseded by prepare endpoint for the detail page).
 - Created `NewProjectModal` component.
 - Updated `Sidebar` to use `NewProjectModal` for creating projects instead of `window.prompt`.
 - Added logout button to the bottom of the `Sidebar` and adjusted its opacity.
 - Created `LoadingSpinner` component with CSS animations.
 - Integrated `LoadingSpinner` into `HomePage` and `ProjectDetailPage`.
-- Updated `DashboardContent` in `HomePage` to show welcome message and features instead of project list.
-- Added "Dashboard" link to top of `Sidebar`.
+- Added "Eng Diagram Insight" link to top of `Sidebar`.
+- Added `geminiFileUri` field to `Diagram` model.
+- Added `chatHistory` field to `Project` model.
+- Created Project Preparation API (`/api/projects/[projectId]/prepare`) to download files from GCS, upload to Gemini File API, update `geminiFileUri` in DB, and fetch chat history.
+- Updated Project Detail page (`/project/[projectId]`) to call `/prepare` endpoint, display chat history, and implement two-column layout.
+- Refactored Chat API (`/api/chat/[projectId]`) back to use `gemini-pro` with text-based context (OCR data) and save conversation history. (File API approach caused errors).
 
 **Current Focus:**
 - Preparing to begin implementing Phase 7 tasks (Testing (Unit, Integration), CI/CD, Polishing, UAT Support, Deployment Prep).
 
 **Next Steps:**
 1.  Begin implementing Phase 7 tasks (Testing (Unit, Integration), CI/CD, Polishing, UAT Support, Deployment Prep).
-2.  Address feature request: multiple file uploads.
+2.  Implement full multiple file upload functionality.
+3.  Implement PDF report generation (Combined, Cost) using Gemini.

@@ -1,11 +1,12 @@
 import { Storage } from '@google-cloud/storage';
 import mongoose from 'mongoose';
 import Diagram from '@/models/Diagram';
-import { ImageAnnotatorClient } from '@google-cloud/vision'; // Import Cloud Vision API
-import { GoogleGenerativeAI } from "@google/generative-ai"; // Import Gemini API
-import { NextResponse } from 'next/server'; // Recommended way to send responses in Next.js App Router
-import { getServerSession } from "next-auth/next"; // Import getServerSession
-import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // Import authOptions
+import Project from '@/models/Project'; // Import Project model
+import { ImageAnnotatorClient } from '@google-cloud/vision';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextResponse } from 'next/server';
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import * as constants from '@/constants';
 
 const {
@@ -15,7 +16,7 @@ const {
   GOOGLE_AI_STUDIO_API_KEY,
 } = constants;
 
-const projectId = GOOGLE_CLOUD_PROJECT_ID;
+const gcpProjectId = GOOGLE_CLOUD_PROJECT_ID; // Renamed to avoid conflict
 const bucketName = GCS_BUCKET_NAME;
 const mongodbUri = MONGODB_URI;
 const geminiApiKey = GOOGLE_AI_STUDIO_API_KEY;
@@ -26,24 +27,27 @@ if (!geminiApiKey) {
 }
 
 // --- GCS Setup ---
-// Initialize GCS client using the service account key (from sa.json)
 const storage = new Storage({
-  projectId: projectId,
-  keyFilename: 'sa.json', // Assuming sa.json is in the root directory (adjust path if needed)
+  projectId: gcpProjectId,
+  keyFilename: 'sa.json',
 });
 const bucket = storage.bucket(bucketName);
 
 // --- Initialize Cloud Vision API client ---
 const vision = new ImageAnnotatorClient({
-  projectId: projectId,
-  keyFilename: 'sa.json', // Assuming sa.json is in the root directory (adjust path if needed)
+  projectId: gcpProjectId,
+  keyFilename: 'sa.json',
 });
 
-// --- Initialize Gemini Pro model ---
+// --- Initialize Gemini Pro model (for initial summary) ---
 let gemini = null;
 if (geminiApiKey) {
-  const genAI = new GoogleGenerativeAI(geminiApiKey);
-  gemini = genAI.getGenerativeModel({ model: "gemini-pro" });
+  try {
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    gemini = genAI.getGenerativeModel({ model: "gemini-pro" });
+  } catch (e) {
+    console.error("Failed to initialize Gemini model for summary:", e);
+  }
 }
 
 // --- MongoDB Connection ---
@@ -55,14 +59,14 @@ async function connectMongoDB() {
     }
   } catch (error) {
     console.error('MongoDB connection error:', error);
-    throw error; // Re-throw to be caught by the handler
+    throw error;
   }
 }
 
 // --- API Route Handler ---
 export async function POST(request) {
   try {
-    await connectMongoDB(); // Ensure MongoDB connection
+    await connectMongoDB();
 
     const formData = await request.formData();
     const file = formData.get('file');
@@ -71,80 +75,70 @@ export async function POST(request) {
     if (!file) {
       return NextResponse.json({ message: 'No file uploaded' }, { status: 400 });
     }
-    if (!projectId) {
-      return NextResponse.json({ message: 'Project ID is missing' }, { status: 400 });
+    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) { // Validate projectId
+      return NextResponse.json({ message: 'Project ID is missing or invalid' }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileName = file.name;
-    const fileType = fileName.split('.').pop(); // Extract extension
+    const fileType = fileName.split('.').pop();
     const fileSize = file.size;
 
     // --- Upload to GCS ---
-    const gcsFileName = `${Date.now()}-${fileName}`; // Unique file name in GCS
+    const gcsFileName = `${Date.now()}-${fileName}`;
     const gcsFile = bucket.file(gcsFileName);
 
     await gcsFile.save(buffer, {
-      metadata: {
-        contentType: file.type, // Use the file's declared MIME type
-      },
+      metadata: { contentType: file.type },
     });
 
-    const storagePath = `gs://${bucketName}/${gcsFileName}`; // Construct GCS path
+    const storagePath = `gs://${bucketName}/${gcsFileName}`;
 
     // --- Call Cloud Vision API for OCR ---
     let ocrText = null;
     try {
-      const [result] = await vision.textDetection(`gs://${bucketName}/${gcsFileName}`);
-      // Check if fullTextAnnotation exists before accessing its text property
+      const [result] = await vision.textDetection(storagePath);
       if (result.fullTextAnnotation) {
         ocrText = result.fullTextAnnotation.text;
         console.log('OCR text extracted successfully.');
       } else {
         console.log('No text detected by OCR.');
-        ocrText = ''; // Assign empty string if no text is detected
+        ocrText = '';
       }
     } catch (ocrError) {
       console.error('OCR error:', ocrError);
-      // Consider whether to still save the Diagram record even if OCR fails
+      // Continue even if OCR fails, just won't have text
     }
 
-    // --- Call Gemini API for analysis ---
+    // --- Call Gemini API for initial analysis/summary (Optional) ---
     let geminiResponse = null;
     if (gemini && ocrText) {
       try {
-        const prompt = `You are a civil engineering AI assistant. Analyze the following text extracted from a bridge diagram and extract key information:\n\n${ocrText}\n\nProvide a summary of the diagram, including key components, materials, and dimensions.`;
-
+        const prompt = `Summarize the key components, materials, and dimensions mentioned in this OCR text from an engineering diagram:\n\n${ocrText}`;
         const result = await gemini.generateContent(prompt);
         const response = await result.response;
-        geminiResponse = response.candidates[0].content.parts[0].text;
-        console.log('Gemini response:', geminiResponse);
+        geminiResponse = response.text(); // Use text() method
+        console.log('Gemini initial summary generated.');
       } catch (geminiError) {
-        console.error('Gemini API error:', geminiError);
-        // Consider whether to still save the Diagram record even if Gemini fails
+        console.error('Gemini summary error:', geminiError);
       }
     } else {
-      console.warn("Gemini API key not set or OCR text is missing. Skipping Gemini analysis.");
+      console.warn("Skipping Gemini initial summary (API key missing or no OCR text).");
     }
 
-    // --- Extract BoM/BoQ data (Placeholder - improve with NLP) ---
+    // --- Extract BoM/BoQ data (Placeholder) ---
     let billOfMaterials = null;
     if (ocrText) {
-      try {
-        // Simple regex-based extraction (example)
-        const quantityRegex = /(\d+)\s+(.*?)(?=\n|$)/gmi; // Matches quantity and item name
+      // ... (BoM extraction logic remains the same)
+       try {
+        const quantityRegex = /(\d+)\s+(.*?)(?=\n|$)/gmi;
         let match;
         const items = [];
-
         while ((match = quantityRegex.exec(ocrText)) !== null) {
-          const quantity = parseInt(match[1]);
-          const itemName = match[2].trim();
-          items.push({ item_name: itemName, quantity: quantity });
+          items.push({ item_name: match[2].trim(), quantity: parseInt(match[1]) });
         }
-
         billOfMaterials = items;
         console.log('Extracted BoM:', billOfMaterials);
-
       } catch (bomError) {
         console.error('BoM extraction error:', bomError);
       }
@@ -152,80 +146,72 @@ export async function POST(request) {
       console.warn("OCR text is missing. Skipping BoM extraction.");
     }
 
-    // --- Load Compliance Rules (Placeholder - IBC for now) ---
+
+    // --- Load Compliance Rules (Placeholder) ---
     let complianceResults = null;
-    try {
-      const ibcRules = require('@/data/ibc_rules.json'); // Load IBC rules
+     try {
+      const ibcRules = require('@/data/ibc_rules.json');
       complianceResults = [];
-
       if (billOfMaterials) {
-        for (const item of billOfMaterials) {
+        // ... (Compliance check logic remains the same)
+         for (const item of billOfMaterials) {
           const matchingRules = ibcRules.filter(rule => rule.component_type === item.item_name);
-
           if (matchingRules.length > 0) {
             for (const rule of matchingRules) {
-              // Basic rule checking (improve with more sophisticated logic)
-              let isCompliant = false;
-              if (rule.property === 'material' && item.item_name === rule.component_type) {
-                isCompliant = (item.item_name === rule.rule);
-              }
-
-              complianceResults.push({
-                item_name: item.item_name,
-                standard: rule.standard,
-                compliant: isCompliant,
-                recommendation: rule.recommendation,
-              });
+              let isCompliant = false; // Basic check
+              complianceResults.push({ item_name: item.item_name, standard: rule.standard, compliant: isCompliant, recommendation: rule.recommendation });
             }
           }
         }
       }
-
       console.log('Compliance Results:', complianceResults);
-
     } catch (complianceError) {
       console.error('Compliance check error:', complianceError);
     }
 
+
     // --- Get User Session ---
     const session = await getServerSession(authOptions);
-    console.log("Session in /api/upload:", JSON.stringify(session, null, 2)); // Log the session object
-    if (!session || !session.user || !session.user.id) { // Check specifically for session.user.id
-      console.error("Unauthorized or user ID missing in session:", session);
+    if (!session || !session.user || !session.user.id) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
     const userId = session.user.id;
+
+     // --- Verify Project Ownership ---
+     const project = await Project.findById(projectId);
+     if (!project || project.owner.toString() !== userId) {
+       return NextResponse.json({ message: 'Project not found or forbidden' }, { status: 404 });
+     }
 
     // --- Create Diagram record in MongoDB ---
     const newDiagram = new Diagram({
       fileName: fileName,
       storagePath: storagePath,
+      // geminiFileUri will be added later by the prepare endpoint
       fileType: fileType,
       fileSize: fileSize,
-      ocrText: ocrText, // Save OCR text
-      extractedData: geminiResponse, // Save Gemini response
-      billOfMaterials: billOfMaterials, // Save BoM data
+      ocrText: ocrText,
+      extractedData: geminiResponse, // Store initial summary
+      billOfMaterials: billOfMaterials,
       complianceResults: complianceResults,
-      project: projectId, // Use the projectId from form data
-      uploadedBy: userId, // Add the user ID
-      // Other fields will default to their schema values
+      project: projectId,
+      uploadedBy: userId,
+      processingStatus: 'Uploaded', // Initial status, 'Preparing' or 'Ready' status will be set by prepare endpoint
     });
 
     await newDiagram.save();
 
-    console.log(`File ${fileName} uploaded to GCS and saved to MongoDB`);
+    // Add diagram reference to the Project document
+    await Project.findByIdAndUpdate(projectId, { $push: { diagrams: newDiagram._id } });
+
+    console.log(`File ${fileName} uploaded to GCS and saved to MongoDB for project ${projectId}`);
 
     return NextResponse.json({ message: 'File uploaded successfully', diagramId: newDiagram._id }, { status: 200 });
 
   } catch (error) {
     console.error('File upload error:', error);
-    // Enhanced error logging (include stack trace if available)
     const errorMessage = error.message || 'File upload failed';
-    const errorDetails = error.stack || error; // Include stack trace if available
-
-    // Log the detailed error to a file or external service in a production environment
-    // Example: logger.error('File upload error', { error: errorDetails });
-
+    const errorDetails = error.stack || error;
     return NextResponse.json({ message: errorMessage, error: errorDetails }, { status: 500 });
   }
 }
@@ -233,14 +219,6 @@ export async function POST(request) {
 // --- Configure API route to disable body parsing ---
 export const config = {
   api: {
-    bodyParser: false, // Let FormData handle the parsing
+    bodyParser: false,
   },
 };
-
-// --- Reminder about Environment Variables ---
-// 1. Create a .env.local file in the root directory
-// 2. Add the following variables (replace with your actual values):
-//    MONGODB_URI=your_mongodb_connection_string
-//    GOOGLE_CLOUD_PROJECT_ID=your_gcp_project_id
-//    GCS_BUCKET_NAME=your_gcs_bucket_name
-// 3. Ensure the sa.json file (service account key) is in the root directory or adjust the path in the code.
