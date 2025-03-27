@@ -215,11 +215,7 @@ export default function ProjectDetailPage() {
                 <li key={diagram._id} className="bg-gray-700 p-3 rounded">
                   <p className="font-medium truncate text-sm mb-1" title={diagram.fileName}>{diagram.fileName}</p>
                   <p className="text-xs text-gray-400 mb-2">{new Date(diagram.createdAt).toLocaleDateString()}</p>
-                  <div className="flex justify-end space-x-2 mt-1">
-                    <Link href={`/ocr/${diagram._id}`}><span className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer">OCR</span></Link>
-                    <Link href={`/bom/${diagram._id}`}><span className="text-xs text-green-400 hover:text-green-300 cursor-pointer">BoM</span></Link>
-                    <Link href={`/compliance/${diagram._id}`}><span className="text-xs text-yellow-400 hover:text-yellow-300 cursor-pointer">Compliance</span></Link>
-                  </div>
+                  {/* Removed individual file action links */}
                 </li>
               ))}
             </ul>

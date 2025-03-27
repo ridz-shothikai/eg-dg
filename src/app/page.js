@@ -10,7 +10,7 @@ import LoadingSpinner from '@/components/LoadingSpinner'; // Import the spinner
 const LandingPage = () => (
   <div className="min-h-screen flex flex-col items-center justify-center bg-[#0c071a] text-white p-8">
     <main className="text-center">
-      <h1 className="text-4xl font-bold mb-4">Welcome to Shothik AI – Doclyze</h1>
+      <h1 className="text-4xl font-bold mb-4">Welcome to Engineering Diagram Insights</h1>
       <p className="text-lg text-gray-300 mb-8">
         AI-Powered Engineering Diagram Analysis
       </p>
@@ -20,11 +20,7 @@ const LandingPage = () => (
             Login
           </span>
         </Link>
-        <Link href="/signup">
-          <span className="bg-[#130830] hover:bg-[#12082c] text-white font-bold py-2 px-4 rounded cursor-pointer">
-            Sign Up
-          </span>
-        </Link>
+        {/* Removed Sign Up button */}
       </div>
     </main>
     <footer className="absolute bottom-8 text-gray-500">

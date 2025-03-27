@@ -120,10 +120,11 @@ export default function LoginForm() {
         </div>
       )}
       <div className="mt-6 text-center">
-        <Link href="/signup" className="text-indigo-400 hover:text-indigo-300">
+        {/* Replaced Link with plain text */}
+        <p className="text-sm text-gray-400">
           {/* eslint-disable-next-line react/no-unescaped-entities */}
-          Don't have an account? Sign Up
-        </Link>
+          Don't have an account? Contact with us
+        </p>
       </div>
     </div>
   );

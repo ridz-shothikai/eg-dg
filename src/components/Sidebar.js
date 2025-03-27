@@ -80,7 +80,8 @@ export default function Sidebar() {
       <div className="w-64 h-screen bg-[#100926] text-white p-4 flex flex-col border-r border-[#130830]">
         {/* Dashboard Link */}
         <Link href="/" className="mb-4">
-          <span className="block text-center font-semibold p-2 rounded hover:bg-[#130830] cursor-pointer">
+          {/* Increased font size */}
+          <span className="block text-center text-xl font-semibold p-2 rounded hover:bg-[#130830] cursor-pointer">
             Eng Diagram Insight
           </span>
         </Link>
