@@ -5,25 +5,26 @@ import connectMongoDB from '@/lib/db';
 import Project from '@/models/Project';
 import Diagram from '@/models/Diagram';
 import mongoose from 'mongoose';
-import { GoogleGenerativeAI } from "@google/generative-ai"; // Import main class from base package
-import { GoogleAIFileManager } from "@google/generative-ai/server"; // Import FileManager from server
+import { GoogleGenerativeAI } from "@google/generative-ai";
+// Removed GoogleAIFileManager
 import mime from 'mime-types';
 import { URL } from 'url';
+import fs from 'fs/promises'; // Import fs promises
+import path from 'path'; // Import path
 import * as constants from '@/constants';
 
-const { GOOGLE_AI_STUDIO_API_KEY } = constants;
+const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME } = constants; // Added GCS_BUCKET_NAME
 
-// --- Initialize Gemini Model and File Manager ---
+// --- Initialize Gemini Model ---
 let gemini = null;
-let fileManager = null;
+// Removed fileManager initialization
 
 if (GOOGLE_AI_STUDIO_API_KEY) {
   try {
     const genAI = new GoogleGenerativeAI(GOOGLE_AI_STUDIO_API_KEY);
-    // Use gemini-2.0-flash for multimodal capabilities
     gemini = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    fileManager = new GoogleAIFileManager(GOOGLE_AI_STUDIO_API_KEY);
-    console.log("Gemini 2.0 Flash model and File Manager initialized for chat.");
+    // Removed fileManager initialization
+    console.log("Gemini 2.0 Flash model initialized for chat.");
   } catch (e) {
     console.error("Failed to initialize Gemini components for chat:", e);
   }
@@ -46,8 +47,8 @@ export async function POST(request, context) {
   if (!message) {
     return NextResponse.json({ message: 'Message is required' }, { status: 400 });
   }
-  if (!gemini || !fileManager) {
-     return NextResponse.json({ message: 'Chat functionality is disabled (API key or components missing)' }, { status: 503 });
+  if (!gemini) { // Removed fileManager check
+     return NextResponse.json({ message: 'Chat functionality is disabled (Gemini not initialized)' }, { status: 503 });
   }
 
   try {
@@ -64,89 +65,110 @@ export async function POST(request, context) {
       return NextResponse.json({ message: 'Project not found or forbidden' }, { status: 404 });
     }
 
-    const diagrams = await Diagram.find({ project: projectId }).select('fileName geminiFileUri processingStatus');
-    const activeDiagrams = diagrams.filter(d => d.geminiFileUri && d.processingStatus === 'ACTIVE');
+    // Fetch diagrams using storagePath
+    const diagrams = await Diagram.find({
+        project: projectId,
+        storagePath: { $exists: true, $ne: null, $ne: '' }
+    }).select('fileName storagePath'); // Select storagePath
 
-    if (activeDiagrams.length === 0) {
-        const processingDiagrams = diagrams.filter(d => d.processingStatus === 'PROCESSING');
-        const failedDiagrams = diagrams.filter(d => d.processingStatus === 'FAILED' || !d.geminiFileUri);
-        let errorMessage = "No documents are ready for chat.";
-        if (processingDiagrams.length > 0) errorMessage = "Some documents are still processing. Please wait a moment and try again.";
-        else if (failedDiagrams.length > 0) errorMessage = "Some documents failed to process correctly. Please check the uploads or try again.";
-        else if (diagrams.length === 0) errorMessage = "No documents have been uploaded to this project yet.";
-        return NextResponse.json({ message: errorMessage }, { status: 503 });
+    if (diagrams.length === 0) {
+        // Handle cases with no diagrams
+        return NextResponse.json({ message: "No documents found for this project to chat with." }, { status: 503 });
     }
 
-    // --- Diagnostic Check ---
-    console.log("Performing diagnostic check on file URIs...");
-    let allFilesVerified = true;
-    for (const diag of activeDiagrams) {
+    // --- Prepare File Parts from Local Cache ---
+    console.log(`Chat API: Preparing ${diagrams.length} files for project ${projectId} from local temp cache...`);
+    const fileParts = [];
+    const processedDiagramNames = [];
+    const projectTempDir = path.join(process.cwd(), 'temp');
+
+    for (const diag of diagrams) {
+        // Derive the expected local temp filename (must match upload/sync logic)
+        const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
+        const objectPath = diag.storagePath.startsWith(gcsPrefix)
+            ? diag.storagePath.substring(gcsPrefix.length)
+            : diag.storagePath;
+        const tempFilePath = path.join(projectTempDir, objectPath);
+
         try {
-            const fileMetadata = await fileManager.getFile(diag.geminiFileUri);
-            if (fileMetadata.state !== 'ACTIVE') {
-                 console.warn(` -> WARNING: File ${diag.geminiFileUri} is not ACTIVE, state is ${fileMetadata.state}`);
-                 allFilesVerified = false; // Require all files to be active
-            } else {
-                 console.log(` -> SUCCESS: File API found ${diag.geminiFileUri}, State: ACTIVE`);
-            }
-        } catch (checkError) {
-            console.error(` -> ERROR: File API check failed for ${diag.geminiFileUri}:`, checkError.message);
-            allFilesVerified = false;
-        }
-    }
-    if (!allFilesVerified) {
-         console.error("Aborting chat generation due to file URI verification failures or non-ACTIVE state.");
-         return NextResponse.json({ message: "Some documents are not ready or failed processing. Please wait or check uploads." }, { status: 503 });
-    }
-    console.log("...File URI diagnostic check complete. All required files are ACTIVE.");
-    // --- End Diagnostic Check ---
+            console.log(` -> Reading local temp file: ${tempFilePath}`);
+            const fileBuffer = await fs.readFile(tempFilePath);
+            const base64Data = fileBuffer.toString('base64');
 
-    // --- Construct File Parts using camelCase ---
-    const fileParts = activeDiagrams.map(diag => ({
-        fileData: { // camelCase
-            mimeType: mime.lookup(diag.fileName) || 'application/octet-stream', // camelCase
-            fileUri: diag.geminiFileUri // camelCase
+            fileParts.push({
+                inlineData: {
+                    mimeType: mime.lookup(diag.fileName) || 'application/octet-stream',
+                    data: base64Data
+                }
+            });
+            processedDiagramNames.push(diag.fileName);
+            console.log(` -> SUCCESS: Prepared inlineData for ${diag.fileName} from local cache.`);
+
+        } catch (readError) {
+            if (readError.code === 'ENOENT') {
+                console.warn(` -> WARNING: File not found in local cache: ${tempFilePath}. Skipping for chat context. Trigger sync if needed.`);
+            } else {
+                console.error(` -> ERROR: Failed to read local file ${tempFilePath} (${diag.fileName}):`, readError.message);
+            }
+            // Continue to next file, but don't add this one
         }
-    }));
+    }
+
+    if (fileParts.length === 0) {
+         console.error(`Chat API: Could not prepare any files from local cache for project ${projectId}.`);
+         // Inform user that files might still be syncing or missing
+         return NextResponse.json({ message: "Documents might still be preparing or are missing. Please try again shortly." }, { status: 503 });
+    }
+    console.log(`...Chat file preparation complete. Using ${fileParts.length} files from local cache.`);
+    // --- End File Preparation ---
+
 
     // --- Format History for startChat ---
-    // Needs to alternate user/model roles. Include file context only in the FIRST user message if history is empty.
     const formattedHistory = [];
     if (history && history.length > 0) {
         history.forEach(item => {
             formattedHistory.push({ role: item.role, parts: [{ text: item.text }] });
         });
-    } else {
-        // If no history, this is the first user message, include file context here.
-        formattedHistory.push({
-            role: "user",
-            parts: [
-                ...fileParts, // Add file references to the first message
-                { text: `Context: These diagrams (${activeDiagrams.map(d => d.fileName).join(', ')}) are part of project "${project.name}". Now, please answer my question.` }
-            ]
-        });
     }
+
+    // Construct the initial user message part, including context and file parts if it's the start of the conversation
+    const contextText = `Context: These diagrams (${processedDiagramNames.join(', ')}) are part of project "${project.name}". Now, please answer my question.`;
+    const initialUserParts = history && history.length > 0 ? [{ text: message }] : [...fileParts, { text: contextText }, { text: message }];
+
+    // If history exists, add the current message. If not, the initialUserParts already contain the first message.
+    if (history && history.length > 0) {
+        formattedHistory.push({ role: "user", parts: [{ text: message }] });
+    } else {
+        // For a new chat, the history starts with the combined initial prompt
+         formattedHistory.push({ role: "user", parts: initialUserParts.filter(p => !p.inlineData) }); // History shouldn't contain file data itself
+         // The actual file data is sent in the *first* message only
+    }
+
 
     console.log("Starting chat session with Gemini 2.0 Flash...");
 
-    // Use startChat for conversation
-    const chatSession = gemini.startChat({
-        history: formattedHistory, // Pass the formatted history
-        // generationConfig can be added here if needed
-    });
+    // Use startChat for conversation if history exists
+    // Otherwise, send the initial message directly with file parts
+    let aiResponseText;
+    if (history && history.length > 0) {
+        const chatSession = gemini.startChat({
+            history: formattedHistory.slice(0, -1), // Pass history *before* the current user message
+        });
+        const result = await chatSession.sendMessage(message); // Send only the current message text
+        aiResponseText = result.response.text();
+    } else {
+        // Send the initial message including file parts
+        const result = await gemini.generateContent(initialUserParts);
+        aiResponseText = result.response.text();
+    }
 
-    // Send the new user message (without file parts, as they are in history or first turn)
-    const result = await chatSession.sendMessage(message);
-    const response = result.response;
-    const aiResponseText = response.text();
 
     // --- Save conversation to DB ---
     try {
-      // Save the actual user message and the AI response
       await Project.findByIdAndUpdate(projectId, {
         $push: {
           chatHistory: [
-            { role: 'user', text: message }, // The user's current message
+            { role: 'user', text: message },
             { role: 'model', text: aiResponseText }
           ]
         }
@@ -161,10 +183,6 @@ export async function POST(request, context) {
   } catch (error) {
     console.error(`Chat API error for project ${projectId}:`, error);
     const errorMessage = error.message || 'Failed to get chat response';
-    // Check for specific Gemini API errors if possible
-    if (error.message && error.message.includes("Invalid or unsupported file uri")) {
-         return NextResponse.json({ message: "Error referencing document context. It might still be processing or encountered an issue.", error: error.toString() }, { status: 500 });
-    }
     return NextResponse.json({ message: errorMessage, error: error.toString() }, { status: 500 });
   }
 }

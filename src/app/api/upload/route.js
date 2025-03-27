@@ -7,6 +7,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import fs from 'fs/promises'; // Import fs promises
+import path from 'path'; // Import path
 import * as constants from '@/constants';
 
 const {
@@ -91,12 +93,30 @@ export async function POST(request) {
     await gcsFile.save(buffer, {
       metadata: { contentType: file.type },
     });
-
+    console.log(`File ${fileName} uploaded to GCS as ${gcsFileName}`);
     const storagePath = `gs://${bucketName}/${gcsFileName}`;
+
+    // --- Save copy to local /temp/ directory ---
+    const projectTempDir = path.join(process.cwd(), 'temp');
+    await fs.mkdir(projectTempDir, { recursive: true });
+    // Use the GCS filename for consistency in the temp dir
+    const tempFilePath = path.join(projectTempDir, gcsFileName);
+    try {
+        await fs.writeFile(tempFilePath, buffer);
+        console.log(`File copy saved locally to ${tempFilePath}`);
+    } catch (tempSaveError) {
+        console.error(`Failed to save file copy to temp directory ${tempFilePath}:`, tempSaveError);
+        // Decide if this is a critical error or just a warning
+        // For now, log a warning and continue
+        console.warn(`Continuing upload process despite failure to save local temp copy.`);
+    }
+    // --- End save copy ---
+
 
     // --- Call Cloud Vision API for OCR ---
     let ocrText = null;
     try {
+      // Use GCS path for Vision API
       const [result] = await vision.textDetection(storagePath);
       if (result.fullTextAnnotation) {
         ocrText = result.fullTextAnnotation.text;
@@ -129,7 +149,6 @@ export async function POST(request) {
     // --- Extract BoM/BoQ data (Placeholder) ---
     let billOfMaterials = null;
     if (ocrText) {
-      // ... (BoM extraction logic remains the same)
        try {
         const quantityRegex = /(\d+)\s+(.*?)(?=\n|$)/gmi;
         let match;
@@ -153,7 +172,6 @@ export async function POST(request) {
       const ibcRules = require('@/data/ibc_rules.json');
       complianceResults = [];
       if (billOfMaterials) {
-        // ... (Compliance check logic remains the same)
          for (const item of billOfMaterials) {
           const matchingRules = ibcRules.filter(rule => rule.component_type === item.item_name);
           if (matchingRules.length > 0) {
@@ -173,6 +191,7 @@ export async function POST(request) {
     // --- Get User Session ---
     const session = await getServerSession(authOptions);
     if (!session || !session.user || !session.user.id) {
+      // Clean up GCS file if user is not authenticated after upload? Maybe not.
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
     const userId = session.user.id;
@@ -180,13 +199,14 @@ export async function POST(request) {
      // --- Verify Project Ownership ---
      const project = await Project.findById(projectId);
      if (!project || project.owner.toString() !== userId) {
+       // Clean up GCS file if project is invalid? Maybe not.
        return NextResponse.json({ message: 'Project not found or forbidden' }, { status: 404 });
      }
 
     // --- Create Diagram record in MongoDB ---
     const newDiagram = new Diagram({
       fileName: fileName,
-      storagePath: storagePath,
+      storagePath: storagePath, // Store GCS path
       // geminiFileUri will be added later by the prepare endpoint
       fileType: fileType,
       fileSize: fileSize,
@@ -196,7 +216,7 @@ export async function POST(request) {
       complianceResults: complianceResults,
       project: projectId,
       uploadedBy: userId,
-      processingStatus: 'Uploaded', // Initial status, 'Preparing' or 'Ready' status will be set by prepare endpoint
+      processingStatus: 'Uploaded', // Initial status
     });
 
     await newDiagram.save();
@@ -204,7 +224,7 @@ export async function POST(request) {
     // Add diagram reference to the Project document
     await Project.findByIdAndUpdate(projectId, { $push: { diagrams: newDiagram._id } });
 
-    console.log(`File ${fileName} uploaded to GCS and saved to MongoDB for project ${projectId}`);
+    console.log(`File ${fileName} saved to DB for project ${projectId}`);
 
     return NextResponse.json({ message: 'File uploaded successfully', diagramId: newDiagram._id }, { status: 200 });
 

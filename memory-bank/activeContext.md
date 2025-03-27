@@ -1,83 +1,44 @@
-# Active Context: Project Initialization
+# Active Context: Report Generation Implementation & Debugging
 
-**Date:** March 27, 2025
+**Date:** March 28, 2025
 
-**Status:** Project Initialized.
+**Status:** Successfully implemented OCR/PDR report generation with real-time feedback.
 
 **Recent Activity:**
-- Initialized the Memory Bank structure and populated it with PRD details.
-- Created basic page structure for Login, Signup, Dashboard, and Home.
-- Added basic forms (inputs, buttons) to Login and Signup pages.
-- Created a basic `FileUpload` component (`src/components/FileUpload.js`) with drag-and-drop UI and integrated it into the Upload page.
-- Set up NextAuth integration (API route, SessionProvider).
-- Defined initial MongoDB schemas for `User`, `Project`, and `Diagram` models.
-- Implemented the file upload API endpoint (`/api/upload`) with GCS integration and MongoDB record creation.
-- Updated the `FileUpload` component to call the `/api/upload` endpoint and display upload status.
-- Implemented user registration logic in the `/api/auth/register` endpoint.
-- Implemented user authentication logic in the NextAuth `authorize` callback.
-- Added client-side logic to display a success message after registration.
-- Implemented session management using `useSession` hook.
-- Protected the Dashboard and Upload pages by redirecting unauthenticated users to the login page.
-- Implemented logout functionality.
-- Added client-side validation and error display to the registration and login forms.
-- Added loading states to the registration and login forms (disabling inputs and displaying a loading indicator on the submit button).
-- Improved the user experience with visual feedback and transitions (hover effects on buttons).
-- Completed all planned tasks for Phase 1 (Authentication and File Upload Foundation).
-- Implemented OCR processing logic in the file upload API endpoint (`/api/upload/route.js`) using the Google Cloud Vision API.
-- Created the OCR result viewer page in the frontend (`src/app/ocr/[diagramId]/page.js`) and updated the `FileUpload` component to redirect to it after a successful upload.
-- Implemented UI elements for highlighting and annotating the extracted text (selection detection and toolbar).
-- Completed all planned tasks for Phase 2 (OCR Integration).
-- Implemented Gemini 2.0 integration in the file upload API endpoint (`/api/upload/route.js`) to analyze the extracted text and store the summary.
-- Completed all planned tasks for Phase 3 (Gemini 2.0 Integration).
-- Implemented basic BoM/BoQ extraction logic in the file upload API endpoint (`/api/upload/route.js`).
-- Created the BoM/BoQ UI in the frontend (`src/app/bom/[diagramId]/page.js`) and updated the `FileUpload` component to redirect to it after a successful upload.
-- Completed all planned tasks for Phase 4 (BoM/BoQ Extraction Logic & UI).
-- Implemented basic compliance checking logic in the file upload API endpoint (`/api/upload/route.js`).
-- Created the Compliance Checker UI in the frontend (`src/app/compliance/[diagramId]/page.js`) and updated the `FileUpload` component to redirect to it after a successful upload.
-- Completed all planned tasks for Phase 5 (Compliance Checker Engine & UI).
-- Created the Knowledge Hub UI in the frontend (`src/app/knowledgehub/page.js`) and updated the `FileUpload` component to redirect to it after a successful upload.
-- Created the Admin Panel UI in the frontend (`src/app/admin/page.js`) and updated the `FileUpload` component to redirect to it after a successful upload.
-- Completed all planned tasks for Phase 6 (Knowledge Hub (Search), Admin Panel UI & API).
-- Added more robust error handling and logging to the API routes.
-- Removed the `geist/font` package and updated the layout to use a default sans-serif font.
-- Updated all API routes to use the user-provided MongoDB connection string from `src/constants.js`.
-- Implemented automatic login after successful registration.
-- Fixed a syntax error in the Admin Panel page (`src/app/admin/page.js`).
-- Fixed the "Upload New Diagram" button functionality on the Dashboard page.
-- Fixed the `react-dropzone` module not found error.
-- Fixed the `@tailwindcss/postcss` module not found error.
-- Fixed the `User is not defined` error in the NextAuth API route.
-- Fixed the `bcrypt is not defined` error in the NextAuth API route.
-- Fixed the `connectMongoDB is not defined` error in the NextAuth API route by creating a separate `db.js` utility.
-- Fixed the `Diagram validation failed: uploadedBy: Path 'uploadedBy' is required.` error by correctly passing the user ID from the session in the NextAuth callbacks and the upload API.
-- Added error handling for cases where OCR might not detect text.
-- Fixed the logout functionality by using the `signOut` function from `next-auth/react`.
-- Created API endpoint (`/api/projects`) to fetch and create projects.
-- Updated `Sidebar` component to display projects and trigger a modal for new project creation.
-- Updated `RootLayout` to integrate the `Sidebar` conditionally.
-- Updated root page (`/`) to act as dashboard (welcome/features) for authenticated users and landing page for unauthenticated users.
-- Created project-specific upload page (`/project/[projectId]/upload`).
-- Updated `FileUpload` component to accept `projectId`, include it in the upload request, redirect to project page, display upload progress using `XMLHttpRequest`, and allow multiple file selection (though only first is uploaded).
-- Refactored Upload API (`/api/upload`) to only handle GCS upload and basic DB record creation (removed Gemini File API logic).
-- Re-enabled `project` field requirement in `Diagram` model.
-- Removed redundant `Dashboard` page (`/dashboard`).
-- Created API endpoint (`/api/projects/[projectId]`) to fetch project details and diagrams (now superseded by prepare endpoint for the detail page).
-- Created `NewProjectModal` component.
-- Updated `Sidebar` to use `NewProjectModal` for creating projects instead of `window.prompt`.
-- Added logout button to the bottom of the `Sidebar` and adjusted its opacity.
-- Created `LoadingSpinner` component with CSS animations.
-- Integrated `LoadingSpinner` into `HomePage` and `ProjectDetailPage`.
-- Added "Eng Diagram Insight" link to top of `Sidebar`.
-- Added `geminiFileUri` field to `Diagram` model.
-- Added `chatHistory` field to `Project` model.
-- Created Project Preparation API (`/api/projects/[projectId]/prepare`) to download files from GCS, upload to Gemini File API, update `geminiFileUri` in DB, and fetch chat history.
-- Updated Project Detail page (`/project/[projectId]`) to call `/prepare` endpoint, display chat history, and implement two-column layout.
-- Refactored Chat API (`/api/chat/[projectId]`) back to use `gemini-pro` with text-based context (OCR data) and save conversation history. (File API approach caused errors).
+- Updated chat API (`/api/chat/[projectId]/route.js`) to use `gemini-2.0-flash`.
+- Added `react-markdown` library for chat response rendering.
+- Fixed chat UI layout issues for independent scrolling.
+- Replaced report download buttons with "OCR Download", "BoM Download", "Compliance Download".
+- Added `cursor-pointer` style to download buttons.
+- Created OCR report API endpoint (`/api/projects/[projectId]/reports/ocr/route.js`).
+- Installed `pdf-lib` and `@google-cloud/storage`.
+- **Implemented Local File Caching Workflow:**
+    - Modified Upload API (`/api/upload`) to save copies to `/temp/`.
+    - Created Sync API (`/api/projects/[projectId]/sync-files`) to download missing files from GCS to `/temp/` on project load.
+    - Modified Project Detail page (`/project/[projectId]`) to call Sync API.
+    - Modified Chat API (`/api/chat`) and OCR Report API (`/api/projects/[projectId]/reports/ocr`) to read files from `/temp/` instead of GCS/File API.
+    - Removed immediate temp file cleanup from OCR Report API (assuming external cleanup).
+- **Implemented SSE for OCR Report:**
+    - Refactored OCR Report API (`ocr/route.js`) to use Server-Sent Events (SSE) via a `GET` request.
+    - API now sends status updates (`message` event), the final download URL (`complete` event), or errors (`error` event).
+    - Generated PDF is uploaded temporarily to GCS, and a signed URL is sent via SSE.
+    - Updated frontend (`ProjectDetailPage`) to use `EventSource` to connect, display status messages on the button, and open the download URL in a new tab (`window.open`).
+- **Addressed OCR Report API Errors:**
+    - Fixed GCS authentication by using `sa.json` keyfile.
+    - Fixed GCS object path extraction from `storagePath`.
+    - Fixed PDF generation error (`WinAnsi cannot encode`) by handling newlines.
+    - Fixed Gemini `RECITATION` block by applying relaxed safety settings to the OCR step.
+    - Fixed Gemini `400 Bad Request` by correcting the payload structure for `generateContent`.
+    - Masked detailed backend errors from the frontend, showing a generic message.
+- **UI Refinements:**
+    - Adjusted loading state on the "OCR Download" button to show spinner and status text inline.
 
 **Current Focus:**
-- Preparing to begin implementing Phase 7 tasks (Testing (Unit, Integration), CI/CD, Polishing, UAT Support, Deployment Prep).
+- Implementing the "BoM Download" and "Compliance Download" report features, likely using a similar SSE approach.
 
 **Next Steps:**
-1.  Begin implementing Phase 7 tasks (Testing (Unit, Integration), CI/CD, Polishing, UAT Support, Deployment Prep).
-2.  Implement full multiple file upload functionality.
-3.  Implement PDF report generation (Combined, Cost) using Gemini.
+1.  Implement the "BoM Download" report generation API (using SSE) and frontend logic.
+2.  Implement the "Compliance Download" report generation API (using SSE) and frontend logic.
+3.  Refine PDF formatting in the report generation API routes.
+4.  Continue with Phase 7 tasks (Testing, CI/CD, etc.) once report features are complete.
+5.  Address potential multiple file upload improvements.
