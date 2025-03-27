@@ -20,10 +20,10 @@ let fileManager = null;
 if (GOOGLE_AI_STUDIO_API_KEY) {
   try {
     const genAI = new GoogleGenerativeAI(GOOGLE_AI_STUDIO_API_KEY);
-    // Use gemini-1.5-flash for multimodal capabilities
-    gemini = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Use gemini-2.0-flash for multimodal capabilities
+    gemini = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     fileManager = new GoogleAIFileManager(GOOGLE_AI_STUDIO_API_KEY);
-    console.log("Gemini 1.5 Flash model and File Manager initialized for chat.");
+    console.log("Gemini 2.0 Flash model and File Manager initialized for chat.");
   } catch (e) {
     console.error("Failed to initialize Gemini components for chat:", e);
   }
@@ -127,10 +127,10 @@ export async function POST(request, context) {
         });
     }
 
-    console.log("Starting chat session with Gemini 1.5 Flash...");
+    console.log("Starting chat session with Gemini 2.0 Flash...");
 
     // Use startChat for conversation
-    const chatSession = model.startChat({
+    const chatSession = gemini.startChat({
         history: formattedHistory, // Pass the formatted history
         // generationConfig can be added here if needed
     });

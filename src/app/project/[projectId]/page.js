@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import ReactMarkdown from 'react-markdown'; // Import ReactMarkdown
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -183,10 +184,10 @@ export default function ProjectDetailPage() {
               <div className="flex-grow overflow-y-auto mb-4 space-y-4 pr-2">
                 {chatHistory.map((msg, index) => (
                   <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`p-3 rounded-lg max-w-lg ${
+                    <div className={`p-3 rounded-lg max-w-lg prose prose-invert ${ // Added prose classes for basic styling
                       msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'
                     }`}>
-                      {msg.text}
+                      {msg.role === 'model' ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
                     </div>
                   </div>
                 ))}
