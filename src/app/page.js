@@ -1,103 +1,83 @@
-import Image from "next/image";
+'use client'; // Need client component for useSession
 
-export default function Home() {
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import LoadingSpinner from '@/components/LoadingSpinner'; // Import the spinner
+
+// Component for Unauthenticated users (Landing Page)
+const LandingPage = () => (
+  <div className="min-h-screen flex flex-col items-center justify-center bg-[#0c071a] text-white p-8">
+    <main className="text-center">
+      <h1 className="text-4xl font-bold mb-4">Welcome to Shothik AI – Doclyze</h1>
+      <p className="text-lg text-gray-300 mb-8">
+        AI-Powered Engineering Diagram Analysis
+      </p>
+      <div className="space-x-4">
+        <Link href="/login">
+          <span className="bg-[#130830] hover:bg-[#12082c] text-white font-bold py-2 px-4 rounded cursor-pointer">
+            Login
+          </span>
+        </Link>
+        <Link href="/signup">
+          <span className="bg-[#130830] hover:bg-[#12082c] text-white font-bold py-2 px-4 rounded cursor-pointer">
+            Sign Up
+          </span>
+        </Link>
+      </div>
+    </main>
+    <footer className="absolute bottom-8 text-gray-500">
+      © {new Date().getFullYear()} Shothik AI
+    </footer>
+  </div>
+);
+
+// Component for Authenticated users (Welcome/Features)
+const DashboardContent = () => {
+  const { data: session } = useSession(); // Get session data for welcome message
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+    <div className="p-8 text-white"> {/* Padding for main content area */}
+      <h1 className="text-3xl font-bold mb-6">Engineering Insights</h1>
+      <div className="bg-gray-800 rounded-lg shadow p-6">
+        <h2 className="text-2xl font-semibold mb-4">Doclyze Features</h2>
+        <ul className="list-disc list-inside space-y-2 text-gray-300">
+          <li>Create projects to organize your diagrams.</li>
+          <li>Upload engineering diagrams (PDF, PNG, JPG, DWG, DXF).</li>
+          <li>Automatic OCR (Text Extraction) from diagrams.</li>
+          <li>AI-powered analysis and summarization (using Gemini).</li>
+          <li>Bill of Materials (BoM/BoQ) extraction.</li>
+          <li>Compliance checking against standards (e.g., IBC).</li>
+          <li>Centralized Knowledge Hub for searching across diagrams.</li>
+          <li>(Coming Soon) Diagram version comparison.</li>
+          <li>(Coming Soon) Integrations with Google Drive & Jira.</li>
+        </ul>
+        <p className="mt-6 text-gray-400">
+          Select a project from the sidebar to view its diagrams, or create a new project to get started.
+        </p>
+      </div>
     </div>
   );
+};
+
+// Main Home Page Component
+export default function HomePage() {
+  const { data: session, status } = useSession();
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <LoadingSpinner text="Loading session..." />
+      </div>
+    );
+  }
+
+  if (status === 'authenticated') {
+    // User is logged in, show Dashboard content (Sidebar is handled by layout)
+    return <DashboardContent />;
+  }
+
+  // User is not logged in, show Landing Page
+  return <LandingPage />;
 }

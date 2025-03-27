@@ -9,15 +9,21 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.15.2",
+    "@google-cloud/vision": "^5.1.0",
+    "@google/generative-ai": "^0.24.0",
+    "bcrypt": "^5.1.1",
+    "mongoose": "^8.13.0",
+    "next": "15.2.4",
+    "next-auth": "^4.24.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next": "15.2.4"
+    "react-dropzone": "^14.3.8"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "@tailwindcss/postcss": "^4.0.17",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4"
   }
 }

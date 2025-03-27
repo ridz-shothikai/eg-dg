@@ -1,0 +1,16 @@
+[
+  {
+    "component_type": "Column",
+    "property": "material",
+    "rule": "Steel",
+    "standard": "Eurocode 3: EN 1993-1-1",
+    "recommendation": "Verify steel grade complies with Eurocode 3: EN 1993-1-1 requirements."
+  },
+  {
+    "component_type": "Foundation",
+    "property": "soil_type",
+    "rule": "Competent Rock",
+    "standard": "Eurocode 7: EN 1997-1",
+    "recommendation": "Verify soil bearing capacity complies with Eurocode 7: EN 1997-1 for the specified foundation type."
+  }
+]

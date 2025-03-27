@@ -1,0 +1,16 @@
+[
+  {
+    "component_type": "Beam",
+    "property": "material",
+    "rule": "Concrete",
+    "standard": "IBC 2021 Section 1903",
+    "recommendation": "Verify concrete mix design complies with IBC 2021 Section 1903."
+  },
+  {
+    "component_type": "Slab",
+    "property": "thickness",
+    "rule": "> 4 inches",
+    "standard": "IBC 2021 Section 1907",
+    "recommendation": "Verify slab thickness complies with IBC 2021 Section 1907 requirements for fire resistance."
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "component_type": "Reinforced Concrete Beam",
+    "property": "concrete_grade",
+    "rule": "M25 or higher",
+    "standard": "IS 456:2000",
+    "recommendation": "Verify concrete grade complies with IS 456:2000 requirements for reinforced concrete beams."
+  },
+  {
+    "component_type": "Steel Column",
+    "property": "steel_grade",
+    "rule": "Fe 410 or higher",
+    "standard": "IS 800:2007",
+    "recommendation": "Verify steel grade complies with IS 800:2007 requirements for steel columns."
+  }
+]
