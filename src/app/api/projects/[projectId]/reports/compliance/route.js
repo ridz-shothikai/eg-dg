@@ -189,7 +189,7 @@ export async function GET(request, { params }) {
 
         // --- Prepare Inline Data from Local Cache ---
         sendSseMessage(controller, { status: `Preparing ${diagrams.length} files...` });
-        const fileParts = []; const processedDiagramNames = []; const projectTempDir = path.join(process.cwd(), 'temp');
+        const fileParts = []; const processedDiagramNames = []; const projectTempDir = '/tmp'; // Use Vercel's writable directory
         for (const diag of diagrams) {
             const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
             const objectPath = diag.storagePath.startsWith(gcsPrefix) ? diag.storagePath.substring(gcsPrefix.length) : diag.storagePath;
