@@ -96,9 +96,9 @@ export async function POST(request) {
     console.log(`File ${fileName} uploaded to GCS as ${gcsFileName}`);
     const storagePath = `gs://${bucketName}/${gcsFileName}`;
 
-    // --- Save copy to local /temp/ directory ---
-    const projectTempDir = path.join(process.cwd(), 'temp');
-    await fs.mkdir(projectTempDir, { recursive: true });
+    // --- Save copy to local /tmp directory (Vercel writable) ---
+    const projectTempDir = '/tmp'; // Use Vercel's writable directory
+    await fs.mkdir(projectTempDir, { recursive: true }); // Ensure /tmp exists (usually does, but safe)
     // Use the GCS filename for consistency in the temp dir
     const tempFilePath = path.join(projectTempDir, gcsFileName);
     try {
