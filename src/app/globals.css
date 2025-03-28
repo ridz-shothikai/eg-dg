@@ -55,3 +55,19 @@ body {
   stroke-dasharray: 80, 200;
   stroke-dashoffset: 0;
 }
+
+/* Zoom In/Out Animation for Loading Dot */
+@keyframes zoom-in-out {
+  0%, 100% {
+    transform: scale(0.75);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+.animate-zoom {
+  animation: zoom-in-out 1s ease-in-out infinite;
+}

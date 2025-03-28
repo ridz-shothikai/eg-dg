@@ -2,36 +2,36 @@
 
 **Date:** March 28, 2025
 
-**Current Status:** Implemented OCR/PDR and BoM report generation with SSE feedback. Starting Compliance report.
+**Current Status:** Addressed Vercel deployment issues (filesystem, Gemini errors). Implemented chat streaming and UI loading indicator update.
 
 **What Works:**
 -   **Core Setup:** Project structure, Memory Bank, basic pages (Home, Auth, Upload), styling, DB schemas.
 -   **Authentication:** NextAuth integration, registration, login, logout, session management, page protection. Landing/Login page UI updated.
--   **File Handling & Caching:**
-    -   GCS upload API (`/api/upload`).
-    -   Upload API saves copy to local `/temp/` directory.
-    -   Sync API (`/api/projects/[projectId]/sync-files`) downloads missing files from GCS to `/temp/`.
+-   **File Handling (Vercel Compatibility):**
+    -   GCS upload API (`/api/upload`) correctly saves a copy to Vercel's `/tmp` directory.
+    -   Sync API (`/api/projects/[projectId]/sync-files`) correctly checks/downloads missing files from GCS to `/tmp`.
     -   Project Detail page triggers background sync on load.
+    -   **Crucially:** Report generation and Chat APIs now download files directly from GCS during execution, avoiding reliance on the unreliable `/tmp` cache in serverless functions.
 -   **Diagram Processing:**
     -   Google Cloud Vision OCR integration during upload (Note: Potential redundancy).
     -   Basic OCR, BoM, Compliance viewer pages (links removed from file cards).
 -   **Project Management:** API for creating/fetching projects, Sidebar display (with larger title), New Project modal.
 -   **Chat:**
     -   Contextual chat UI on project page with independent scrolling.
-    -   Backend API using Gemini 2.0 Flash.
-    -   Reads files from local `/temp/` cache using `inlineData`.
-    -   Chat history saving and loading.
+    -   Backend API (`chat/[projectId]/route.js`) using Gemini 2.0 Flash, downloads files directly from GCS.
+    -   **Streaming:** Backend streams Gemini response; frontend updates UI incrementally with an animated dot loading indicator.
+    -   Chat history saving (full response) and loading.
     -   Markdown rendering for responses.
--   **Report Generation (OCR/PDR & BoM):**
+-   **Report Generation (OCR/PDR, BoM, Compliance):**
     -   "OCR Download", "BoM Download", "Compliance Download" buttons on project page.
-    -   Backend API routes (`ocr/route.js`, `bom/route.js`) implemented using Server-Sent Events (SSE).
-    -   APIs read files from `/temp/` cache, perform OCR & specific report generation via Gemini (handling safety settings), create PDF (`pdf-lib`), upload temporary PDF to GCS, send signed URL via SSE.
-    -   Frontend handlers (`handleOcrDownload`, `handleBomDownload`) use `EventSource` to display real-time status updates on the correct button and open the final PDF URL in a new tab.
+    -   Backend API routes (`ocr/`, `bom/`, `compliance/`) implemented using Server-Sent Events (SSE).
+    -   APIs now download files directly from GCS, perform OCR & specific report generation via Gemini, create PDF (`pdf-lib`), upload temporary PDF to GCS, send signed URL via SSE.
+    -   Frontend handlers (`handleOcrDownload`, etc.) use `EventSource` for real-time status and opening PDF.
     -   Independent loading/status/error state management for each report button.
     -   Generic error messages shown to user for backend failures.
 
 **What's Left to Build (High Level):**
--   Implement Compliance Download report generation (API & Frontend - using SSE).
+-   Thorough testing of Vercel deployment (upload, sync, reports, chat streaming).
 -   Refine PDF formatting for all reports.
 -   Implement Diagram Comparison feature.
 -   Implement Knowledge Hub search functionality.
@@ -42,12 +42,12 @@
 -   Deployment Preparation.
 -   (Lower Priority) Full multiple file upload handling.
 -   (Decision) Clarify if Google Vision OCR is still needed or if Gemini OCR suffices for all features.
--   (External) Implement mechanism to clean up old files in `/temp/`.
+-   (External) Implement mechanism to clean up temporary *report* files in GCS. (Local `/tmp` cleanup is less critical now).
 
 **Known Issues:**
 -   The `params` warning in Next.js API routes needs monitoring.
 -   PDF report formatting is currently very basic.
--   Potential redundancy between Google Vision OCR (on upload) and Gemini OCR (for reports).
--   Local `/temp/` cache relies on filesystem persistence and needs an external cleanup mechanism.
+-   Potential redundancy between Google Vision OCR (on upload) and Gemini OCR (for reports/chat).
+-   Need a strategy for cleaning up temporary report PDFs generated in GCS `temp-reports/` folder.
 
-**Development Plan Phase:** Completed OCR/PDR and BoM report downloads. Moving to Compliance report download next (Phase 5/7 overlap).
+**Development Plan Phase:** Completed Vercel deployment fixes and chat streaming implementation. Focus now shifts to testing and stabilization (Phase 6/7).

@@ -7,6 +7,13 @@ import { useSession } from 'next-auth/react';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ReactMarkdown from 'react-markdown';
 
+// Simple SVG Copy Icon component
+const CopyIcon = ({ className = "w-4 h-4" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 0v-3.5m0 3.5c-1.313 0-2.5-.388-3.5-.995m3.5.995c1.313 0 2.5.388 3.5.995m-3.5-.995V11.25m0 6.75a9.063 9.063 0 0 1-3.5-.995M12.75 2.25H9.375a1.125 1.125 0 0 0-1.125 1.125v9.75c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V7.875a1.125 1.125 0 0 0-1.125-1.125H13.5m0-3.375V6.75" />
+  </svg>
+);
+
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
   const { data: session, status } = useSession();
@@ -20,6 +27,7 @@ export default function ProjectDetailPage() {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatError, setChatError] = useState('');
+  const [copiedIndex, setCopiedIndex] = useState(null); // State to track copied message index
 
   // Refactored Report States
   const [reportStates, setReportStates] = useState({
@@ -178,22 +186,95 @@ export default function ProjectDetailPage() {
 
 
   const handleSendMessage = async () => {
-    // ... (keep existing handleSendMessage function as is)
     if (!chatInput.trim() || isChatLoading || preparationStatus !== 'ready') return;
-    const newMessage = { role: 'user', text: chatInput };
-    const currentHistory = [...chatHistory, newMessage];
-    setChatHistory(currentHistory); setChatInput(''); setIsChatLoading(true); setChatError('');
+
+    const userMessage = { role: 'user', text: chatInput };
+    const currentInput = chatInput; // Store input before clearing
+    setChatInput(''); // Clear input immediately
+
+    // Add user message and a placeholder for the model's streaming response
+    const modelPlaceholderIndex = chatHistory.length + 1;
+    setChatHistory(prev => [...prev, userMessage, { role: 'model', text: '' }]);
+    setIsChatLoading(true);
+    setChatError('');
+
     try {
-      const response = await fetch(`/api/chat/${projectId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: newMessage.text, history: chatHistory.slice(-6) }) });
-      if (!response.ok) { const d=await response.json().catch(()=>({})); throw new Error(d.message||'Failed'); }
-      const data = await response.json();
-      setChatHistory([...currentHistory, { role: 'model', text: data.response }]);
-    } catch (err) { console.error('Chat error:', err); setChatError(err.message); }
-    finally { setIsChatLoading(false); }
+      const response = await fetch(`/api/chat/${projectId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Send previous history excluding the placeholder we just added
+        body: JSON.stringify({ message: currentInput, history: chatHistory.slice(-6) })
+      });
+
+      if (!response.ok) {
+        // Try to get error message from JSON, fallback to status text
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Request failed: ${response.statusText}`);
+      }
+
+      // --- Handle Streaming Response ---
+      if (!response.body) {
+        throw new Error("Streaming response not supported or body is missing.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let accumulatedText = ""; // Keep track locally if needed, but primarily update state
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          accumulatedText += chunk; // Accumulate locally if needed for final save check
+          // Update the placeholder message in the state
+          setChatHistory(prev => {
+            const newHistory = [...prev];
+            // Ensure the placeholder exists before trying to update
+            if (newHistory[modelPlaceholderIndex] && newHistory[modelPlaceholderIndex].role === 'model') {
+                 newHistory[modelPlaceholderIndex] = { ...newHistory[modelPlaceholderIndex], text: newHistory[modelPlaceholderIndex].text + chunk };
+            } else {
+                // Handle edge case where placeholder might not be there (shouldn't happen with current logic)
+                console.warn("Model placeholder not found at index", modelPlaceholderIndex);
+                // Optionally add a new message if placeholder is missing
+                // newHistory.push({ role: 'model', text: chunk });
+            }
+
+            return newHistory;
+          });
+        }
+      }
+      // --- End Streaming Handling ---
+
+    } catch (err) {
+      console.error('Chat error:', err);
+      setChatError(err.message);
+      // Optionally remove the placeholder if an error occurred before any response
+      setChatHistory(prev => prev.filter((_, index) => index !== modelPlaceholderIndex || prev[modelPlaceholderIndex]?.text));
+    } finally {
+      setIsChatLoading(false);
+      // Ensure chat scrolls down after streaming finishes
+       setTimeout(() => {
+           if (chatContainerRef.current) {
+               chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+           }
+       }, 100); // Small delay to allow final render
+    }
+  };
+
+  // Function to handle copying text
+  const handleCopy = (text, index) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedIndex(index); // Set the index of the copied message
+      setTimeout(() => setCopiedIndex(null), 1500); // Reset after 1.5 seconds
+    }).catch(err => {
+      console.error('Failed to copy text: ', err);
+    });
   };
 
   // --- Render Logic ---
-  if (loading || status === 'loading') return <div className="flex-grow flex items-center justify-center bg-gray-900"><LoadingSpinner text="Loading project..." /></div>;
+  if (loading || status === 'loading') return <div className="flex-grow flex items-center justify-center bg-gray-900"><LoadingSpinner text="Loading project..." /></div>; // Restored text prop
   if (error && preparationStatus === 'failed') return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Error: {error}</div>;
   if (!project) return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Project data unavailable.</div>;
 
@@ -243,7 +324,7 @@ export default function ProjectDetailPage() {
               >
                 {activeReportType === 'ocr' ? ( // Use activeReportType
                   <div className="flex items-center justify-center space-x-2">
-                    <LoadingSpinner size="sm" text={null} />
+                    <LoadingSpinner size="sm" text={null} /> {/* Restored text prop (as null) */}
                     <span>{reportStates.ocr.message || "Generating..."}</span>
                   </div>
                 ) : ( 'OCR Download' )}
@@ -256,7 +337,7 @@ export default function ProjectDetailPage() {
               >
                  {activeReportType === 'bom' ? ( // Use activeReportType
                   <div className="flex items-center justify-center space-x-2">
-                    <LoadingSpinner size="sm" text={null} />
+                    <LoadingSpinner size="sm" text={null} /> {/* Restored text prop (as null) */}
                     <span>{reportStates.bom.message || "Generating..."}</span>
                   </div>
                 ) : ( 'BoM Download' )}
@@ -269,7 +350,7 @@ export default function ProjectDetailPage() {
               >
                  {activeReportType === 'compliance' ? ( // Use activeReportType
                   <div className="flex items-center justify-center space-x-2">
-                    <LoadingSpinner size="sm" text={null} />
+                    <LoadingSpinner size="sm" text={null} /> {/* Restored text prop (as null) */}
                     <span>{reportStates.compliance.message || "Generating..."}</span>
                   </div>
                 ) : ( 'Compliance Download' )}
@@ -282,32 +363,58 @@ export default function ProjectDetailPage() {
       {/* Right Column: Chat Interface */}
       <div className="w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col overflow-hidden">
         <h2 className="text-2xl font-semibold mb-4 text-white">Contextual Chat</h2>
-        <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col overflow-hidden">
-          {/* ... (rest of chat UI remains the same) ... */}
+        {/* Ensure outer container allows vertical scroll but hides horizontal */}
+        <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col overflow-y-auto overflow-x-hidden">
            {preparationStatus === 'loading' ? (
-             <div className="flex-grow flex items-center justify-center"><LoadingSpinner text="Preparing documents for chat..." /></div>
+             <div className="flex-grow flex items-center justify-center"><LoadingSpinner text="Preparing documents for chat..." /></div> // Restored text prop
           ) : preparationStatus === 'processing' ? (
-             <div className="flex-grow flex items-center justify-center text-yellow-400"><LoadingSpinner text="Documents are processing, please wait..." /></div>
+             <div className="flex-grow flex items-center justify-center text-yellow-400"><LoadingSpinner text="Documents are processing, please wait..." /></div> // Restored text prop
           ) : preparationStatus === 'failed' ? (
              <p className="text-red-500 text-center flex-grow flex items-center justify-center">Failed to prepare documents for chat. Please try reloading.</p>
           ) : preparationStatus === 'no_files' ? (
              <p className="text-gray-400 text-center flex-grow flex items-center justify-center">Upload diagrams to enable contextual chat.</p>
           ) : preparationStatus === 'ready' ? (
             <React.Fragment>
-              <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2">
-                {chatHistory.map((msg, index) => (
-                  <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`p-3 rounded-lg max-w-lg prose prose-invert ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'}`}>
-                      {msg.role === 'model' ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
+              {/* Inner container for chat history, allow vertical scroll */}
+              <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4"> {/* Added mb-4 */}
+                {chatHistory.map((msg, index) => {
+                  const isModel = msg.role === 'model';
+                  // Check if this specific message is the loading placeholder
+                  const isLoadingPlaceholder = isModel && msg.text === '' && isChatLoading && index === chatHistory.length - 1;
+
+                  return (
+                    // Container for each message row (bubble + optional copy button)
+                    <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      {/* Message Bubble */}
+                      <div className={`p-3 rounded-lg max-w-lg prose prose-invert ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'} ${isLoadingPlaceholder ? 'flex items-center justify-center' : ''}`}>
+                        {isLoadingPlaceholder ? (
+                          <div className="w-3 h-3 bg-gray-400 rounded-full animate-zoom"></div>
+                        ) : isModel ? (
+                          <ReactMarkdown>{msg.text}</ReactMarkdown>
+                        ) : (
+                          msg.text
+                        )}
+                      </div>
+                      {/* Add Copy button UNDER completed model messages */}
+                      {isModel && !isLoadingPlaceholder && msg.text && (
+                        <button
+                          onClick={() => handleCopy(msg.text, index)}
+                          className="mt-1 p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors" // Removed absolute, opacity, group-hover
+                          title={copiedIndex === index ? "Copied!" : "Copy text"}
+                        >
+                          <CopyIcon className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ))}
-                 {isChatLoading && <div className="flex justify-start"><div className="p-3 rounded-lg max-w-lg bg-gray-600 text-white"><LoadingSpinner text="Thinking..." /></div></div>}
-                 {chatError && <p className="text-red-500 text-sm">Error: {chatError}</p>}
+                  );
+                 })}
+                 {/* Removed the separate loading indicator block */}
+                 {chatError && <p className="text-red-500 text-sm mt-2 self-start">{chatError}</p>} {/* Adjusted error message position */}
               </div>
-              <div className="mt-auto flex pt-4">
+              {/* Input area */}
+              <div className="mt-auto flex pt-4 border-t border-gray-700"> {/* Added border */}
                 <textarea
-                  className="flex-grow p-2 bg-gray-700 rounded-l border border-gray-600 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-70"
+                  className="flex-grow p-2 bg-gray-700 rounded-l border border-gray-600 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-70 resize-none" // Added resize-none
                   placeholder="Ask questions about the diagrams..."
                   rows="2"
                   value={chatInput}
@@ -316,7 +423,7 @@ export default function ProjectDetailPage() {
                   disabled={isChatLoading || preparationStatus !== 'ready'}
                 ></textarea>
                 <button
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-2 rounded-r disabled:opacity-50"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-2 rounded-r disabled:opacity-50 flex items-center justify-center" // Ensure button aligns
                   onClick={handleSendMessage}
                   disabled={isChatLoading || !chatInput.trim() || preparationStatus !== 'ready'}
                 >

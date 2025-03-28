@@ -34,13 +34,14 @@ graph TD
 4.  **OCR Processing:** The backend triggers Google Cloud Vision API on the stored file.
 5.  **Data Extraction & Storage:** Parsed text and identified components from OCR are processed by the backend and stored in a structured format in MongoDB, linked to the diagram record.
 6.  **Chat Interaction:**
-    *   The frontend chat UI sends user queries to the backend.
-    *   The backend retrieves relevant structured data from MongoDB based on the diagram context.
-    *   This data is injected into a prompt template for the Gemini 2.0 API.
-    *   Gemini processes the prompt and returns an answer.
-    *   The backend relays the answer to the frontend.
-7.  **BoM/BoQ Generation:** The backend extracts relevant data points from the structured MongoDB records to generate Bills of Materials/Quantities.
-8.  **Compliance Check:** The backend runs extracted component data against predefined rule sets (IBC, Eurocodes, IS) stored or accessed by the backend.
+    *   The frontend chat UI sends user queries to the backend API route (`chat/[projectId]/route.js`).
+    *   The backend API downloads the relevant diagram files directly from GCS.
+    *   The file data and user query (plus history) are sent to the Gemini 2.0 API using its streaming methods (`generateContentStream`/`sendMessageStream`).
+    *   The backend API returns a `ReadableStream` to the frontend.
+    *   The frontend reads the stream and updates the UI incrementally.
+    *   The backend saves the full conversation to MongoDB after the stream completes.
+7.  **BoM/BoQ Generation:** The backend API route downloads relevant diagrams from GCS, uses Gemini for analysis (potentially including OCR), formats the result, creates a temporary PDF, uploads it to GCS, and returns a signed URL via SSE.
+8.  **Compliance Check:** Similar flow to BoM generation, but uses compliance rules and specific prompts for Gemini analysis.
 9.  **Version Comparison:** The backend compares metadata and potentially visual representations (requiring further definition) of two diagram versions stored in MongoDB/GCS.
 10. **Knowledge Hub:** Leverages MongoDB's search capabilities (potentially Atlas Search for NLP queries) to query historical project data.
 
@@ -62,5 +63,6 @@ graph TD
 -   **Scalability:** Leveraging serverless functions (Vercel/Cloud Run) and managed cloud services (GCS, MongoDB Atlas, Cloud Vision, AI Studio) aids scalability.
 -   **Modularity:** Features like OCR, Chat, BoM generation, and Compliance are distinct modules interacting via the backend API layer.
 -   **Data Structure:** A well-defined MongoDB schema is crucial for linking diagrams, parsed data, user context, and project information effectively.
--   **Error Handling:** Robust error handling is needed for external API calls (Vision, Gemini) and file processing.
+-   **Error Handling:** Robust error handling is needed for external API calls (Vision, Gemini), file processing, GCS operations, and stream handling.
 -   **Security:** Authentication and authorization (role-based access) are critical, especially for admin functions and project data access.
+-   **Serverless File Handling:** API routes requiring file content (reports, chat) must download files directly from GCS during execution due to the ephemeral nature of the `/tmp` directory in Vercel's serverless environment. Relying on a separate sync process to populate `/tmp` is unreliable.

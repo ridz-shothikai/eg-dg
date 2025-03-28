@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server'; // Keep NextResponse for errors
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+// Import ReadableStream and TextEncoder if not implicitly available in Next.js Edge Runtime (though this looks like Node)
+// No explicit import needed for standard Node.js ReadableStream/TextEncoder in this environment.
 import connectMongoDB from '@/lib/db';
 import Project from '@/models/Project';
 import Diagram from '@/models/Diagram';
@@ -163,40 +165,70 @@ export async function POST(request, context) {
     }
 
 
-    console.log("Starting chat session with Gemini 2.0 Flash...");
+    console.log("Starting chat stream with Gemini 2.0 Flash...");
 
-    // Use startChat for conversation if history exists
-    // Otherwise, send the initial message directly with file parts
-    let aiResponseText;
-    if (history && history.length > 0) {
-        const chatSession = gemini.startChat({
-            history: formattedHistory.slice(0, -1), // Pass history *before* the current user message
-        });
-        const result = await chatSession.sendMessage(message); // Send only the current message text
-        aiResponseText = result.response.text();
-    } else {
-        // Send the initial message including file parts
-        const result = await gemini.generateContent(initialUserParts);
-        aiResponseText = result.response.text();
-    }
+    // --- Use Streaming ---
+    const encoder = new TextEncoder();
+    let accumulatedResponse = ""; // To store the full response for DB saving
 
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          let resultStream;
+          if (history && history.length > 0) {
+              const chatSession = gemini.startChat({
+                  history: formattedHistory.slice(0, -1), // History before current message
+              });
+              // Use sendMessageStream for ongoing conversations
+              resultStream = await chatSession.sendMessageStream(message);
+          } else {
+              // Use generateContentStream for the first message (with files)
+              resultStream = await gemini.generateContentStream(initialUserParts);
+          }
 
-    // --- Save conversation to DB ---
-    try {
-      await Project.findByIdAndUpdate(projectId, {
-        $push: {
-          chatHistory: [
-            { role: 'user', text: message },
-            { role: 'model', text: aiResponseText }
-          ]
+          // Process the stream from Gemini
+          for await (const chunk of resultStream.stream) {
+            const chunkText = chunk.text();
+            accumulatedResponse += chunkText; // Accumulate text
+            controller.enqueue(encoder.encode(chunkText)); // Send chunk to client
+          }
+
+          // --- Save full conversation to DB AFTER streaming is complete ---
+          try {
+            await Project.findByIdAndUpdate(projectId, {
+              $push: {
+                chatHistory: [
+                  { role: 'user', text: message },
+                  { role: 'model', text: accumulatedResponse } // Save accumulated response
+                ]
+              }
+            });
+            console.log(`Chat history saved for project ${projectId}`);
+          } catch (dbError) {
+            console.error(`Failed to save chat history for project ${projectId}:`, dbError);
+            // Don't necessarily stop the stream, but log the error
+          }
+
+          controller.close(); // Close the stream when Gemini is done
+        } catch (streamError) {
+           console.error("Error during Gemini stream processing:", streamError);
+           // Try to send an error message through the stream if possible, or just close
+           try {
+                controller.enqueue(encoder.encode(`\n\n[ERROR: ${streamError.message}]`));
+           } catch (e) { /* Ignore if controller is already closed */ }
+           controller.close();
+           // Note: DB saving might not happen if an error occurs mid-stream
         }
-      });
-      console.log(`Chat history saved for project ${projectId}`);
-    } catch (dbError) {
-      console.error(`Failed to save chat history for project ${projectId}:`, dbError);
-    }
+      }
+    });
 
-    return NextResponse.json({ response: aiResponseText }, { status: 200 });
+    // Return the stream response
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8', // Use text/plain for simple streaming
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
 
   } catch (error) {
     console.error(`Chat API error for project ${projectId}:`, error);
