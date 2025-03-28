@@ -77,10 +77,10 @@ export async function POST(request, context) {
     }
 
     // --- Prepare File Parts from Local Cache ---
-    console.log(`Chat API: Preparing ${diagrams.length} files for project ${projectId} from local temp cache...`);
+    console.log(`Chat API: Preparing ${diagrams.length} files for project ${projectId} from local /tmp cache...`);
     const fileParts = [];
     const processedDiagramNames = [];
-    const projectTempDir = path.join(process.cwd(), 'temp');
+    const projectTempDir = '/tmp'; // Use Vercel's writable directory
 
     for (const diag of diagrams) {
         // Derive the expected local temp filename (must match upload/sync logic)
