@@ -11,9 +11,28 @@ import mime from 'mime-types';
 import { URL } from 'url';
 import fs from 'fs/promises'; // Import fs promises
 import path from 'path'; // Import path
+import { Storage } from '@google-cloud/storage'; // Import Storage
 import * as constants from '@/constants';
 
-const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME } = constants; // Added GCS_BUCKET_NAME
+const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants; // Added GCS_BUCKET_NAME and GOOGLE_CLOUD_PROJECT_ID
+
+// --- Initialize GCS Storage ---
+let storage = null;
+if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
+    try {
+        const keyFilePath = path.join(process.cwd(), 'sa.json');
+        storage = new Storage({
+             projectId: GOOGLE_CLOUD_PROJECT_ID,
+             keyFilename: keyFilePath
+        });
+        console.log(`Chat API: GCS Storage client initialized using keyfile ${keyFilePath} for bucket: ${GCS_BUCKET_NAME}`);
+    } catch(e) {
+        console.error("Chat API: Failed to initialize GCS Storage client:", e);
+    }
+} else {
+    console.warn("Chat API: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS download functionality will be disabled.");
+}
+
 
 // --- Initialize Gemini Model ---
 let gemini = null;
@@ -76,23 +95,26 @@ export async function POST(request, context) {
         return NextResponse.json({ message: "No documents found for this project to chat with." }, { status: 503 });
     }
 
-    // --- Prepare File Parts from Local Cache ---
-    console.log(`Chat API: Preparing ${diagrams.length} files for project ${projectId} from local /tmp cache...`);
+    // --- Prepare File Parts by Downloading Directly from GCS ---
+    console.log(`Chat API: Preparing ${diagrams.length} files for project ${projectId} from GCS...`);
     const fileParts = [];
     const processedDiagramNames = [];
-    const projectTempDir = '/tmp'; // Use Vercel's writable directory
+    // Need GCS storage client initialized earlier
+    if (!storage || !GCS_BUCKET_NAME) {
+        return NextResponse.json({ message: 'Chat functionality is disabled (GCS not initialized)' }, { status: 503 });
+    }
+
 
     for (const diag of diagrams) {
-        // Derive the expected local temp filename (must match upload/sync logic)
         const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
         const objectPath = diag.storagePath.startsWith(gcsPrefix)
             ? diag.storagePath.substring(gcsPrefix.length)
             : diag.storagePath;
-        const tempFilePath = path.join(projectTempDir, objectPath);
 
         try {
-            console.log(` -> Reading local temp file: ${tempFilePath}`);
-            const fileBuffer = await fs.readFile(tempFilePath);
+            console.log(` -> Downloading GCS file for chat context: ${objectPath}`);
+            // Download file content directly into a buffer
+            const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
             const base64Data = fileBuffer.toString('base64');
 
             fileParts.push({
@@ -102,24 +124,20 @@ export async function POST(request, context) {
                 }
             });
             processedDiagramNames.push(diag.fileName);
-            console.log(` -> SUCCESS: Prepared inlineData for ${diag.fileName} from local cache.`);
+            console.log(` -> SUCCESS: Prepared inlineData for ${diag.fileName} from GCS.`);
 
-        } catch (readError) {
-            if (readError.code === 'ENOENT') {
-                console.warn(` -> WARNING: File not found in local cache: ${tempFilePath}. Skipping for chat context. Trigger sync if needed.`);
-            } else {
-                console.error(` -> ERROR: Failed to read local file ${tempFilePath} (${diag.fileName}):`, readError.message);
-            }
-            // Continue to next file, but don't add this one
+        } catch (downloadError) {
+            console.error(` -> ERROR: Failed to download GCS file ${objectPath} (${diag.fileName}) for chat:`, downloadError.message);
+            // Continue to next file, but don't add this one. Crucial for chat to proceed if possible.
         }
     }
 
     if (fileParts.length === 0) {
-         console.error(`Chat API: Could not prepare any files from local cache for project ${projectId}.`);
-         // Inform user that files might still be syncing or missing
-         return NextResponse.json({ message: "Documents might still be preparing or are missing. Please try again shortly." }, { status: 503 });
+         console.error(`Chat API: Could not prepare any files from GCS for project ${projectId}.`);
+         // Inform user that files might be missing or inaccessible
+         return NextResponse.json({ message: "Could not access documents for chat. Please ensure they are uploaded correctly." }, { status: 503 });
     }
-    console.log(`...Chat file preparation complete. Using ${fileParts.length} files from local cache.`);
+    console.log(`...Chat file preparation complete. Using ${fileParts.length} files from GCS.`);
     // --- End File Preparation ---
 
 

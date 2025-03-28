@@ -200,37 +200,34 @@ export async function GET(request, { params }) {
             throw new Error("No documents with storage paths found.");
         }
 
-        // --- Prepare Inline Data from Local Cache ---
-        sendSseMessage(controller, { status: `Preparing ${diagrams.length} files from cache...` });
+        // --- Prepare Inline Data by Downloading Directly from GCS ---
+        sendSseMessage(controller, { status: `Preparing ${diagrams.length} files from GCS...` });
         const fileParts = [];
         const processedDiagramNames = [];
-        const projectTempDir = '/tmp'; // Use Vercel's writable directory
 
         for (const diag of diagrams) {
             const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
             const objectPath = diag.storagePath.startsWith(gcsPrefix) ? diag.storagePath.substring(gcsPrefix.length) : diag.storagePath;
-            const tempFilePath = path.join(projectTempDir, objectPath);
 
             try {
-                sendSseMessage(controller, { status: `Reading ${diag.fileName} from cache...` });
-                const fileBuffer = await fs.readFile(tempFilePath);
+                sendSseMessage(controller, { status: `Downloading ${diag.fileName} from GCS...` });
+                // Download file content directly into a buffer
+                const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
                 const base64Data = fileBuffer.toString('base64');
                 fileParts.push({ inlineData: { mimeType: mime.lookup(diag.fileName) || 'application/octet-stream', data: base64Data } });
                 processedDiagramNames.push(diag.fileName);
-            } catch (readError) {
-                if (readError.code === 'ENOENT') {
-                    console.warn(`BoM SSE: File not found in local cache: ${tempFilePath}. Skipping.`);
-                    sendSseMessage(controller, { status: `Skipping ${diag.fileName} (not cached)...` });
-                } else {
-                    throw new Error(`Failed to read local file ${tempFilePath}: ${readError.message}`);
-                }
+                sendSseMessage(controller, { status: `Prepared ${diag.fileName}.` });
+            } catch (downloadError) {
+                 console.error(`BoM SSE: Failed to download GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
+                 sendSseMessage(controller, { status: `Skipping ${diag.fileName} (download failed)...` });
+                 // Optionally throw an error if any download fails, or just skip
             }
         }
 
         if (fileParts.length === 0) {
-             throw new Error("Could not read any documents from local cache.");
+             throw new Error("Could not prepare any documents from GCS.");
         }
-        sendSseMessage(controller, { status: `Using ${fileParts.length} cached files.` });
+        sendSseMessage(controller, { status: `Using ${fileParts.length} downloaded files.` });
         // --- End File Preparation ---
 
         // --- Step 1: Perform OCR ---
