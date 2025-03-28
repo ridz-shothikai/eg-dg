@@ -14,9 +14,9 @@
     - Modified the chat API route (`chat/[projectId]/route.js`) to use Gemini's streaming methods (`generateContentStream`/`sendMessageStream`) and return a `ReadableStream`.
     - Updated the frontend chat component (`project/[projectId]/page.js`) to handle the streaming response, read chunks, and update the UI incrementally for a real-time typing effect.
     - Ensured the full chat response is saved to the database after the stream completes.
-- **UI Refinements (Chat Loading):**
-    - Updated the chat loading indicator in `project/[projectId]/page.js` again to show only a zooming grey dot (using the existing `animate-zoom` class) instead of the spinner circle or the previous pulsing dot/text.
-    - The `zoom-in-out` animation was already present in `globals.css`.
+- **UI Refinements (Chat):**
+    - **Loading Indicator:** Updated the chat loading indicator in `project/[projectId]/page.js` to show only a zooming grey dot (using the existing `animate-zoom` class) within the message bubble, removing the separate avatar.
+    - **Copy Button:** Added a copy icon button below each completed AI response bubble in the chat (`project/[projectId]/page.js`). Clicking the button copies the message text to the clipboard.
 
 **Current Focus:**
 - Verifying the stability of the Vercel deployment after the filesystem and streaming fixes.

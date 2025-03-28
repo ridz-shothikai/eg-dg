@@ -9,9 +9,12 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/ge
 import mime from 'mime-types';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Storage } from '@google-cloud/storage';
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os'; // Still needed for temp file path
+// No longer need fs/promises or os for this specific file handling approach
+// import fs from 'fs/promises';
+// import path from 'path';
+// import os from 'os';
+import path from 'path'; // Still needed for keyfile path
+// import os from 'os'; // Not needed here anymore
 import * as constants from '@/constants';
 
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
@@ -100,46 +103,187 @@ async function callGemini(prompt, fileParts = [], applySafetySettings = false) {
     }
 }
 
-// Helper function to create PDF (remains the same)
+// Helper function to create PDF with final formatting fixes v3
 async function createPdf(text) {
-    // ... (keep existing createPdf function as is)
     const pdfDoc = await PDFDocument.create();
     const timesRomanFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
+    const timesRomanBoldFont = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
+
     let page = pdfDoc.addPage();
     const { width, height } = page.getSize();
-    const fontSize = 11;
     const margin = 50;
     const textWidth = width - 2 * margin;
-    const lineHeight = fontSize * 1.2;
-    let y = height - margin - fontSize;
-    const paragraphs = (text || '').split('\n');
-    for (const paragraph of paragraphs) {
-        if (paragraph.trim() === '') {
-            if (y < margin + lineHeight) { page = pdfDoc.addPage(); y = height - margin - fontSize; }
-            y -= lineHeight; continue;
-        }
-        const words = paragraph.split(/(\s+)/);
+    const indent = 20; // Indentation for content after bold label
+
+    const normalFontSize = 11;
+    const h2FontSize = 16; // For ##
+    const h1FontSize = 20; // For #
+    const normalLineHeight = normalFontSize * 1.2;
+    const h2LineHeight = h2FontSize * 1.2;
+    const h1LineHeight = h1FontSize * 1.2;
+
+    let y = height - margin - h1FontSize; // Start lower for potential main title
+
+    // Clean up input text first
+    let initialCleanedText = (text || '').replace(/```/g, ''); // Remove backticks first
+    // Remove leading "markdown" line, case-insensitive, handling potential whitespace/newlines
+    if (initialCleanedText.trim().toLowerCase().startsWith('markdown')) {
+        initialCleanedText = initialCleanedText.replace(/^\s*markdown\s*(\r?\n)?/i, '');
+    }
+    const cleanedText = initialCleanedText.trim();
+
+    const lines = cleanedText.split(/\r?\n/); // Split by newline, handling Windows/Unix
+
+    // Helper to draw wrapped text (handles line breaking) - simplified
+    function drawWrappedLine(line, options) {
+        const { x, font, size, color, lineHeight: currentLineHeight, availableWidth = textWidth } = options;
+        const words = line.split(/(\s+)/); // Split by spaces, keeping spaces
         let currentLine = '';
+
         for (const word of words) {
-            if (!word) continue;
+            if (!word) continue; // Skip empty strings from split
+
             const testLine = currentLine + word;
             let testLineWidth = 0;
-            try { testLineWidth = timesRomanFont.widthOfTextAtSize(testLine, fontSize); }
-            catch (e) { console.warn(`PDF: Skipping word "${word}" due to width error: ${e.message}`); continue; }
-            if (testLineWidth < textWidth) { currentLine = testLine; }
-            else {
-                if (y < margin + lineHeight) { page = pdfDoc.addPage(); y = height - margin - fontSize; }
-                try { page.drawText(currentLine.trimEnd(), { x: margin, y: y, size: fontSize, font: timesRomanFont, color: rgb(0, 0, 0), lineHeight: lineHeight }); y -= lineHeight; }
-                catch (e) { console.warn(`PDF: Skipping line "${currentLine}" due to draw error: ${e.message}`); }
+            try {
+                testLineWidth = font.widthOfTextAtSize(testLine, size);
+            } catch (e) {
+                console.warn(`PDF: Skipping word "${word}" due to width error: ${e.message}`);
+                continue;
+            }
+
+            if (testLineWidth < availableWidth) {
+                currentLine = testLine;
+            } else {
+                // Line wrap needed
+                if (y < margin + currentLineHeight) {
+                    page = pdfDoc.addPage();
+                    y = height - margin - size; // Reset y for new page
+                }
+                try {
+                    page.drawText(currentLine.trimEnd(), { x, y, size, font, color, lineHeight: currentLineHeight });
+                    y -= currentLineHeight;
+                } catch (e) {
+                    console.warn(`PDF: Skipping line "${currentLine}" due to draw error: ${e.message}`);
+                }
+                // Start new line with the current word, respecting original x indent
                 currentLine = word.trimStart();
             }
         }
+
+        // Draw the last remaining line
         if (currentLine.trim()) {
-            if (y < margin + lineHeight) { page = pdfDoc.addPage(); y = height - margin - fontSize; }
-            try { page.drawText(currentLine.trimEnd(), { x: margin, y: y, size: fontSize, font: timesRomanFont, color: rgb(0, 0, 0), lineHeight: lineHeight }); y -= lineHeight; }
-            catch (e) { console.warn(`PDF: Skipping final line "${currentLine}" due to draw error: ${e.message}`); }
+            if (y < margin + currentLineHeight) {
+                page = pdfDoc.addPage();
+                y = height - margin - size; // Reset y for new page
+            }
+            try {
+                page.drawText(currentLine.trimEnd(), { x, y, size, font, color, lineHeight: currentLineHeight });
+                y -= currentLineHeight;
+            } catch (e) {
+                console.warn(`PDF: Skipping final line "${currentLine}" due to draw error: ${e.message}`);
+            }
+        } else if (line.trim() === '') { // Ensure empty lines also advance y
+             y -= currentLineHeight;
+        }
+    } // End of drawWrappedLine helper
+
+    // Process lines from cleaned Gemini output
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        // More flexible regex for bold label: **Label** : Content or **Label:** Content
+        const boldLabelMatch = trimmedLine.match(/^\*\*(.*?)\s*:\*\*\s*(.*)/);
+
+        // Estimate needed height for page break check
+        let neededHeight = normalLineHeight;
+        if (trimmedLine.startsWith('# ')) neededHeight = h1LineHeight * 1.5;
+        else if (trimmedLine.startsWith('## ')) neededHeight = h2LineHeight * 1.5;
+        else if (boldLabelMatch) neededHeight = normalLineHeight * (boldLabelMatch[2].trim() ? 1.5 : 1); // Extra space if content follows label
+        else if (trimmedLine === '') neededHeight = normalLineHeight;
+
+        // Check page break condition BEFORE drawing anything for the line
+        if (y < margin + neededHeight) {
+             page = pdfDoc.addPage();
+             let resetFontSize = normalFontSize;
+             if (trimmedLine.startsWith('# ')) resetFontSize = h1FontSize;
+             else if (trimmedLine.startsWith('## ')) resetFontSize = h2FontSize;
+             y = height - margin - resetFontSize; // Reset Y based on the type of the first element
+        }
+
+
+        if (trimmedLine.startsWith('# ')) {
+             // --- Handle H1 Heading ---
+             const headingText = trimmedLine.substring(2).trim();
+             y -= h1LineHeight * 0.5; // Space before
+             const textWidthH1 = timesRomanBoldFont.widthOfTextAtSize(headingText, h1FontSize);
+             const centeredX = (width - textWidthH1) / 2;
+             drawWrappedLine(headingText, {
+                 x: Math.max(margin, centeredX),
+                 font: timesRomanBoldFont,
+                 size: h1FontSize,
+                 color: rgb(0, 0, 0),
+                 lineHeight: h1LineHeight
+             });
+             // y is decremented by drawWrappedLine
+
+        } else if (trimmedLine.startsWith('## ')) {
+            // --- Handle H2 Heading ---
+            const headingText = trimmedLine.substring(3).trim();
+             y -= h2LineHeight * 0.5; // Space before
+            drawWrappedLine(headingText, {
+                x: margin,
+                font: timesRomanBoldFont,
+                size: h2FontSize,
+                color: rgb(0, 0, 0),
+                lineHeight: h2LineHeight
+            });
+             // y is decremented by drawWrappedLine
+
+        } else if (boldLabelMatch) {
+            // --- Handle Bold Label Line (Simplified Layout) ---
+            const label = boldLabelMatch[1].trim() + ":"; // Get label, trim, add colon
+            const content = boldLabelMatch[2].trim();
+
+            // Draw label bold at margin
+            page.drawText(label, { x: margin, y: y, font: timesRomanBoldFont, size: normalFontSize, color: rgb(0, 0, 0) });
+            y -= normalLineHeight; // Move down after drawing label
+
+            // Draw content normal, wrapped, starting on the NEXT line, indented
+            if (content) {
+                 if (y < margin + normalLineHeight) { // Check page break for content
+                     page = pdfDoc.addPage();
+                     y = height - margin - normalFontSize;
+                 }
+                 drawWrappedLine(content, {
+                     x: margin + indent, // Indent content
+                     font: timesRomanFont,
+                     size: normalFontSize,
+                     color: rgb(0, 0, 0),
+                     lineHeight: normalLineHeight,
+                     availableWidth: textWidth - indent // Adjust available width for indent
+                 });
+                 // y is decremented by drawWrappedLine
+            }
+             // No extra space needed here, y was already moved down after label or content
+
+        } else if (trimmedLine === '') {
+            // --- Handle Empty line (Paragraph break) ---
+             // drawWrappedLine now handles advancing y for empty lines
+             drawWrappedLine('', { x: margin, font: timesRomanFont, size: normalFontSize, color: rgb(0, 0, 0), lineHeight: normalLineHeight });
+
+        } else {
+            // --- Handle Regular paragraph line ---
+             drawWrappedLine(trimmedLine, {
+                 x: margin,
+                 font: timesRomanFont,
+                 size: normalFontSize,
+                 color: rgb(0, 0, 0),
+                 lineHeight: normalLineHeight
+             });
+              // y is decremented by drawWrappedLine
         }
     }
+
     const pdfBytes = await pdfDoc.save();
     return pdfBytes;
 }
@@ -284,12 +428,12 @@ export async function GET(request, { params }) {
         } catch (sseError) {
             console.error("SSE Error: Failed to send error message to client:", sseError);
         }
-        // Optional: Clean up temp files created *during this failed request*
-        // Note: This doesn't handle the general cache cleanup
-         console.log(`Cleaning up ${tempFilePaths.length} temporary files due to error...`);
-         for (const tempPath of tempFilePaths) {
-             try { await fs.unlink(tempPath); } catch (e) { /* Ignore cleanup errors */ }
-         }
+        // Optional: Clean up temp files created *during this failed request* (if any were created, though this route no longer creates local temp files)
+        // Note: This doesn't handle the general GCS temp report cleanup
+         // console.log(`Cleaning up ${tempFilePaths.length} temporary files due to error...`);
+         // for (const tempPath of tempFilePaths) {
+         //     try { await fs.unlink(tempPath); } catch (e) { /* Ignore cleanup errors */ }
+         // }
 
       } finally {
         // Close the stream
