@@ -65,10 +65,10 @@ export async function POST(request, { params }) {
         return NextResponse.json({ message: "No documents found to sync.", synced: 0, skipped: 0, errors: 0 }, { status: 200 });
     }
 
-    // --- Check local /temp/ and download missing files ---
-    console.log(`Sync API: Checking/Syncing ${diagrams.length} files for project ${projectId} to local temp...`);
-    const projectTempDir = path.join(process.cwd(), 'temp');
-    await fs.mkdir(projectTempDir, { recursive: true }); // Ensure dir exists
+    // --- Check local /tmp and download missing files ---
+    console.log(`Sync API: Checking/Syncing ${diagrams.length} files for project ${projectId} to local /tmp...`);
+    const projectTempDir = '/tmp'; // Use Vercel's writable directory
+    await fs.mkdir(projectTempDir, { recursive: true }); // Ensure /tmp exists (usually does, but safe)
 
     let syncedCount = 0;
     let skippedCount = 0;
