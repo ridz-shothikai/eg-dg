@@ -1,4 +1,4 @@
-# Progress: Shothik AI – Doclyze
+# Progress: Engineering Diagram Insights
 
 **Date:** March 30, 2025
 

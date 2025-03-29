@@ -1,4 +1,4 @@
-# Tech Context: Shothik AI – Doclyze
+# Tech Context: Engineering Diagram Insights
 
 ## Core Technologies
 

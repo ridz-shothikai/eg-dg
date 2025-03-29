@@ -37,7 +37,7 @@ const DashboardContent = () => {
     <div className="p-8 text-white"> {/* Padding for main content area */}
       <h1 className="text-3xl font-bold mb-6">Engineering Insights</h1>
       <div className="bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-2xl font-semibold mb-4">Doclyze Features</h2>
+        <h2 className="text-2xl font-semibold mb-4">Features</h2> {/* Changed title */}
         <ul className="list-disc list-inside space-y-2 text-gray-300">
           <li>Create projects to organize your diagrams.</li>
           <li>Upload engineering diagrams (PDF, PNG, JPG, DWG, DXF).</li>

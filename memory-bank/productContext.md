@@ -1,8 +1,8 @@
-# Product Context: Shothik AI – Doclyze
+# Product Context: Engineering Diagram Insights
 
 ## Problem Solved
 
-Doclyze addresses the manual effort and potential inaccuracies involved in interpreting complex technical diagrams like blueprints and schematics. It aims to automate the extraction of critical engineering information, making it faster and easier for engineers to get insights, check compliance, and manage revisions.
+Engineering Diagram Insights addresses the manual effort and potential inaccuracies involved in interpreting complex technical diagrams like blueprints and schematics. It aims to automate the extraction of critical engineering information, making it faster and easier for engineers to get insights, check compliance, and manage revisions.
 
 ## How It Works
 

@@ -109,49 +109,27 @@ async function callGemini(prompt, fileParts = [], applySafetySettings = false) {
 async function createPdfFromHtml(htmlContent) {
     let browser = null;
     console.log("Generating PDF from HTML using Puppeteer...");
-    let executablePath = null;
     try { // Start main try block HERE, encompassing everything
-        let launchArgs = []; // Define args array
+        // --- Determine executablePath and args ---
+        // Use environment variable set in Dockerfile if available, otherwise use local puppeteer
+        const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteerFull.executablePath();
+        // Use minimal args for both local and production (safer default)
+        const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
 
-        // --- Determine executablePath and args based on environment ---
-        const isProduction = process.env.NODE_ENV === 'production';
-        console.log(`Environment detected: ${isProduction ? 'Production' : 'Development'}`);
-
-        try { // Nested try for specific path/args error handling
-            if (isProduction) {
-                // Use @sparticuz/chromium for production (Vercel or Docker/other)
-                console.log("Using @sparticuz/chromium path and args for production...");
-                executablePath = await chromium.executablePath();
-                launchArgs = chromium.args; // Use sparticuz args in prod
-            } else {
-                // Use full puppeteer for local development
-                console.log("Using local puppeteer path and minimal args...");
-                executablePath = puppeteerFull.executablePath();
-                // Use minimal args for local dev
-                launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
-            }
-            console.log(`Using Chromium executable path: ${executablePath}`);
-            console.log(`Using launch args: ${JSON.stringify(launchArgs)}`);
-        } catch (envError) { // Catch specific path/args errors
-            console.error("Error determining Puppeteer environment specifics:", envError);
-            const envType = isProduction ? 'Production (@sparticuz/chromium)' : 'Local (puppeteer)';
-            // Re-throw as a more specific error
-            throw new Error(`Failed to get Puppeteer specifics for ${envType}: ${envError.message}`);
-        }
-        // --- End environment determination ---
+        console.log(`Using Chromium executable path: ${executablePath}`);
+        console.log(`Using launch args: ${JSON.stringify(launchArgs)}`);
+        // --- End determination ---
 
         if (!executablePath) {
-             // This error will now be caught by the outer catch
-             throw new Error("Chromium executable path could not be determined for the current environment.");
+             throw new Error("Chromium executable path could not be determined.");
             }
 
             console.log("Launching browser...");
-            // Use the determined path and args
             const launchOptions = {
-                args: launchArgs, // Use determined args
-                defaultViewport: chromium.defaultViewport, // Keep using sparticuz default viewport
+                args: launchArgs,
+                // defaultViewport: chromium.defaultViewport, // Use Puppeteer's default
                 executablePath: executablePath,
-                headless: chromium.headless, // Keep using sparticuz headless mode
+                headless: true, // Default to headless true
                 ignoreHTTPSErrors: true,
             };
 

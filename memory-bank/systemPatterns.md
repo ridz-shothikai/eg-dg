@@ -1,8 +1,8 @@
-# System Patterns: Shothik AI – Doclyze
+# System Patterns: Engineering Diagram Insights
 
 ## Architecture Overview
 
-Doclyze employs a full-stack architecture using Next.js, leveraging server-side rendering (SSR) and API routes for backend functionality. It integrates several Google Cloud services for core features.
+Engineering Diagram Insights employs a full-stack architecture using Next.js, leveraging server-side rendering (SSR) and API routes for backend functionality. It integrates several Google Cloud services for core features.
 
 ```mermaid
 graph TD
