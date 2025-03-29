@@ -37,7 +37,8 @@ RUN apk add --no-cache \
 # Find compatible revisions: https://github.com/Sparticuz/chromium/releases
 # Using a known good revision URL (adjust if needed based on exact compatibility)
 ENV CHROMIUM_REVISION=133.0.6998.35
-RUN wget --no-verbose https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROMIUM_REVISION}/linux64/chrome-linux64.zip -P /tmp \
+# Updated URL to official chrome-for-testing storage
+RUN wget --no-verbose https://storage.googleapis.com/chrome-for-testing-public/${CHROMIUM_REVISION}/linux64/chrome-linux64.zip -P /tmp \
     && unzip /tmp/chrome-linux64.zip -d /opt \
     && rm /tmp/chrome-linux64.zip \
     && mv /opt/chrome-linux64 /opt/chromium \
