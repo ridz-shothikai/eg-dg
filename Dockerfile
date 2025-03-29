@@ -28,7 +28,10 @@ RUN apk add --no-cache \
     ttf-freefont \
     nss \
     freetype \
-    harfbuzz
+    harfbuzz \
+    ca-certificates \
+    udev \
+    libstdc++
 
 # Download and unzip specific Chromium revision compatible with @sparticuz/chromium v133
 # Find compatible revisions: https://github.com/Sparticuz/chromium/releases

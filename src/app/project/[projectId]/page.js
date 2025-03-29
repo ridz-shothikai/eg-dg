@@ -362,7 +362,7 @@ export default function ProjectDetailPage() {
 
       {/* Right Column: Chat Interface */}
       <div className="w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col overflow-hidden">
-        <h2 className="text-2xl font-semibold mb-4 text-white">Contextual Chat</h2>
+        <h2 className="text-2xl font-semibold mb-4 text-white">Chat for Insights</h2> {/* Updated Title */}
         {/* Ensure outer container allows vertical scroll but hides horizontal */}
         <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col overflow-y-auto overflow-x-hidden">
            {preparationStatus === 'loading' ? (
