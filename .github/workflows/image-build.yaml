@@ -5,6 +5,7 @@ on:
     branches:
       - master
   workflow_dispatch:
+  
 
 env:
   EKS_CLUSTER_NAME: shothik
