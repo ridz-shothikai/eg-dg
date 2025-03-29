@@ -109,96 +109,96 @@ async function callGemini(prompt, fileParts = [], applySafetySettings = false) {
 async function createPdfFromHtml(htmlContent) {
     let browser = null;
     console.log("Generating PDF from HTML using Puppeteer...");
-    let executablePath = null; // Define outside try block
-    // --- Conditionally determine executablePath ---
-    try {
-        if (process.env.VERCEL) {
-            console.log("Running on Vercel, using @sparticuz/chromium path...");
-            executablePath = await chromium.executablePath(); // For Vercel
-        } else {
-            console.log("Running locally, using puppeteer path...");
-            executablePath = puppeteerFull.executablePath(); // For local dev
+    let executablePath = null;
+    try { // Start main try block HERE, encompassing everything
+        // --- Conditionally determine executablePath ---
+        try { // Nested try remains for specific error handling
+            if (process.env.VERCEL) {
+                console.log("Running on Vercel, using @sparticuz/chromium path...");
+                executablePath = await chromium.executablePath(); // For Vercel
+            } else {
+                console.log("Running locally, using puppeteer path...");
+                executablePath = puppeteerFull.executablePath(); // For local dev
+            }
+            console.log(`Using Chromium executable path: ${executablePath}`); // Log the path
+        } catch (pathError) { // Catch specific path errors
+            console.error("Error getting Chromium executable path:", pathError);
+            const envType = process.env.VERCEL ? 'Vercel (@sparticuz/chromium)' : 'Local (puppeteer)';
+            // Re-throw as a more specific error to be caught by the outer catch
+            throw new Error(`Failed to get Chromium executable path for ${envType}: ${pathError.message}`); // Add semicolon
         }
-        console.log(`Using Chromium executable path: ${executablePath}`); // Log the path
-    } catch (pathError) {
-        console.error("Error getting Chromium executable path:", pathError);
-        // Provide more context in the error
-        const envType = process.env.VERCEL ? 'Vercel (@sparticuz/chromium)' : 'Local (puppeteer)';
-        throw new Error(`Failed to get Chromium executable path for ${envType}: ${pathError.message}`);
-    }
-    // --- End conditional determination ---
+        // --- End conditional determination ---
 
-    if (!executablePath) {
-         // This error should be more specific now based on the try-catch above
-         throw new Error("Chromium executable path could not be determined for the current environment.");
-        }
+        if (!executablePath) {
+             // This error will now be caught by the outer catch
+             throw new Error("Chromium executable path could not be determined for the current environment."); // Add semicolon
+            }
 
-        console.log("Launching browser...");
-        const launchOptions = {
-            defaultViewport: chromium.defaultViewport,
-            executablePath: executablePath, // Use the obtained path
-            headless: chromium.headless, // Use headless mode from sparticuz
-            ignoreHTTPSErrors: true,
-        };
+            console.log("Launching browser...");
+            const launchOptions = {
+                defaultViewport: chromium.defaultViewport,
+                executablePath: executablePath, // Use the obtained path
+                headless: chromium.headless, // Use headless mode from sparticuz
+                ignoreHTTPSErrors: true,
+            };
 
-        if (process.env.VERCEL) {
-            console.log("Using Vercel-optimized args for Puppeteer launch.");
-            launchOptions.args = chromium.args;
-        } else {
-            console.log("Using minimal args for local Puppeteer launch.");
-            // Use a minimal set for local dev, or omit entirely to use puppeteer defaults
-            // Example minimal set (adjust if needed):
-            launchOptions.args = ['--no-sandbox', '--disable-setuid-sandbox'];
-        }
+            if (process.env.VERCEL) {
+                console.log("Using Vercel-optimized args for Puppeteer launch.");
+                launchOptions.args = chromium.args;
+            } else {
+                console.log("Using minimal args for local Puppeteer launch.");
+                launchOptions.args = ['--no-sandbox', '--disable-setuid-sandbox'];
+            }
 
-        browser = await puppeteer.launch(launchOptions);
-        console.log("Browser launched.");
+            browser = await puppeteer.launch(launchOptions); // browser is declared outside try
+            console.log("Browser launched.");
 
-        const page = await browser.newPage();
-        console.log("New page created.");
+            const page = await browser.newPage();
+            console.log("New page created.");
 
-        // Add basic styling for better PDF output
-        const styledHtml = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <style>
-                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; padding: 20px; color: #333; }
-                    h1, h2, h3 { margin-bottom: 0.5em; margin-top: 1.5em; color: #110927; }
-                    h1 { font-size: 24px; text-align: center; border-bottom: 2px solid #130830; padding-bottom: 10px; margin-bottom: 25px; }
-                    h2 { font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 15px; }
-                    h3 { font-size: 16px; }
-                    p { margin-bottom: 1em; }
-                    ul, ol { margin-left: 20px; margin-bottom: 1em; }
-                    li { margin-bottom: 0.5em; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 1em; margin-bottom: 1em; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-                    th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; vertical-align: top; }
-                    th { background-color: #f8f8f8; font-weight: bold; color: #100926; }
-                    tbody tr:nth-child(even) { background-color: #fdfdfd; }
-                    pre { background-color: #f5f5f5; padding: 10px; border: 1px solid #eee; border-radius: 4px; overflow-x: auto; font-family: 'Courier New', Courier, monospace; }
-                </style>
-            </head>
-            <body>
-                ${htmlContent}
-            </body>
-            </html>
-        `;
+            // Add basic styling for better PDF output
+            const styledHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; padding: 20px; color: #333; }
+                        h1, h2, h3 { margin-bottom: 0.5em; margin-top: 1.5em; color: #110927; }
+                        h1 { font-size: 24px; text-align: center; border-bottom: 2px solid #130830; padding-bottom: 10px; margin-bottom: 25px; }
+                        h2 { font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 15px; }
+                        h3 { font-size: 16px; }
+                        p { margin-bottom: 1em; }
+                        ul, ol { margin-left: 20px; margin-bottom: 1em; }
+                        li { margin-bottom: 0.5em; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 1em; margin-bottom: 1em; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+                        th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; vertical-align: top; }
+                        th { background-color: #f8f8f8; font-weight: bold; color: #100926; }
+                        tbody tr:nth-child(even) { background-color: #fdfdfd; }
+                        pre { background-color: #f5f5f5; padding: 10px; border: 1px solid #eee; border-radius: 4px; overflow-x: auto; font-family: 'Courier New', Courier, monospace; }
+                    </style>
+                </head>
+                <body>
+                    ${htmlContent}
+                </body>
+                </html>
+            `;
 
-        console.log("Setting page content...");
-        await page.setContent(styledHtml, { waitUntil: 'networkidle0' });
-        console.log("Page content set.");
+            console.log("Setting page content...");
+            await page.setContent(styledHtml, { waitUntil: 'networkidle0' });
+            console.log("Page content set.");
 
-        console.log("Generating PDF bytes...");
-        const pdfBytes = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: { top: '1in', right: '1in', bottom: '1in', left: '1in' },
-            preferCSSPageSize: true
-        });
-        console.log("PDF bytes generated.");
+            console.log("Generating PDF bytes...");
+            const pdfOptions = {
+                format: 'A4',
+                printBackground: true,
+                margin: { top: '1in', right: '1in', bottom: '1in', left: '1in' },
+                preferCSSPageSize: true
+            };
+            const pdfBytes = await page.pdf(pdfOptions);
+            console.log("PDF bytes generated.");
 
-        return pdfBytes;
+            return pdfBytes; // Return from within the main try block
     } catch (error) {
         console.error("Error generating PDF from HTML:", error);
         throw new Error(`Failed to generate PDF using Puppeteer: ${error.message}`);
@@ -209,6 +209,7 @@ async function createPdfFromHtml(htmlContent) {
             console.log("Browser closed.");
         }
     }
+} // <-- Add missing closing brace for createPdfFromHtml function
 
 // --- END NEW ---
 
@@ -222,10 +223,8 @@ function sendSseMessage(controller, data, eventName = 'message') { // Renamed pa
 }
 
 // GET handler for SSE connection (BoM Report)
-export async function GET(request, { params }) {
-  // Attempt to fix "params should be awaited" warning/error
-  const awaitedParams = await params;
-  const { projectId } = awaitedParams;
+export async function GET(request, { params }) { // Use standard { params } destructuring
+  const { projectId } = params; // Use direct destructuring
 
   if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
     return new Response("Invalid Project ID", { status: 400 });
@@ -396,9 +395,9 @@ Generate the Bill of Materials report in HTML format now.`;
         }
       }
     }
-  });
+  }); // Add semicolon after ReadableStream definition
 
-  return new Response(stream, {
+  return new Response(stream, { // Add semicolon after return statement
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
