@@ -14,6 +14,8 @@ env:
 jobs:
   push-store-image:
     runs-on: ubuntu-latest
+    env: # Add job-level env block
+      NODE_ENV: production
     # permissions:
     #   packages: write
     defaults:

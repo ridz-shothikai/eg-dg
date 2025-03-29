@@ -111,47 +111,51 @@ async function createPdfFromHtml(htmlContent) {
         // Ensure Chromium is executable and fonts are available in Vercel's environment
         // await chromium.font('https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf'); // Add necessary fonts if needed
 
-        let executablePath = null; // Define outside try block
-        // --- Conditionally determine executablePath ---
-        try {
-            if (process.env.VERCEL) {
-                console.log("Running on Vercel, using @sparticuz/chromium path...");
-                executablePath = await chromium.executablePath(); // For Vercel
+        let executablePath = null;
+        let launchArgs = []; // Define args array
+
+        // --- Determine executablePath and args based on environment ---
+        const isProduction = process.env.NODE_ENV === 'production';
+        console.log(`Environment detected: ${isProduction ? 'Production' : 'Development'}`);
+
+        try { // Nested try for specific path/args error handling
+            if (isProduction) {
+                // Use @sparticuz/chromium for production (Vercel or Docker/other)
+                console.log("Using @sparticuz/chromium path and args for production...");
+                executablePath = await chromium.executablePath();
+                launchArgs = chromium.args; // Use sparticuz args in prod
             } else {
-                console.log("Running locally, using puppeteer path...");
-                executablePath = puppeteerFull.executablePath(); // For local dev
+                // Use full puppeteer for local development
+                console.log("Using local puppeteer path and minimal args...");
+                executablePath = puppeteerFull.executablePath();
+                // Use minimal args for local dev
+                launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
             }
-            console.log(`Using Chromium executable path: ${executablePath}`); // Log the path
-        } catch (pathError) {
-            console.error("Error getting Chromium executable path:", pathError);
-            // Provide more context in the error
-            const envType = process.env.VERCEL ? 'Vercel (@sparticuz/chromium)' : 'Local (puppeteer)';
-            throw new Error(`Failed to get Chromium executable path for ${envType}: ${pathError.message}`);
+            console.log(`Using Chromium executable path: ${executablePath}`);
+            console.log(`Using launch args: ${JSON.stringify(launchArgs)}`);
+        } catch (envError) { // Catch specific path/args errors
+            console.error("Error determining Puppeteer environment specifics:", envError);
+            const envType = isProduction ? 'Production (@sparticuz/chromium)' : 'Local (puppeteer)';
+            // Re-throw as a more specific error
+            throw new Error(`Failed to get Puppeteer specifics for ${envType}: ${envError.message}`);
         }
-        // --- End conditional determination ---
+        // --- End environment determination ---
 
         if (!executablePath) {
-             // This error should be more specific now based on the try-catch above
+             // This error will now be caught by the outer catch
              throw new Error("Chromium executable path could not be determined for the current environment.");
-        }
+            }
 
-        console.log("Launching browser...");
-        const launchOptions = {
-            defaultViewport: chromium.defaultViewport,
-            executablePath: executablePath, // Use the obtained path
-            headless: chromium.headless, // Use headless mode from sparticuz
-            ignoreHTTPSErrors: true,
-        };
-
-        if (process.env.VERCEL) {
-            console.log("Using Vercel-optimized args for Puppeteer launch.");
-            launchOptions.args = chromium.args;
-        } else {
-            console.log("Using minimal args for local Puppeteer launch.");
-            // Use a minimal set for local dev, or omit entirely to use puppeteer defaults
-            // Example minimal set (adjust if needed):
-            launchOptions.args = ['--no-sandbox', '--disable-setuid-sandbox'];
-        }
+            console.log("Launching browser...");
+            // Use the determined path and args
+            const launchOptions = {
+                args: launchArgs, // Use determined args
+                defaultViewport: chromium.defaultViewport, // Keep using sparticuz default viewport
+                executablePath: executablePath,
+                headless: chromium.headless, // Keep using sparticuz headless mode
+                ignoreHTTPSErrors: true,
+            };
+        // The args are already set correctly within the isProduction check above
 
         browser = await puppeteer.launch(launchOptions);
         console.log("Browser launched.");

@@ -16,6 +16,8 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# Set NODE_ENV to production for the runtime environment
+ENV NODE_ENV=production
 
 # Copy built app from the builder stage
 COPY --from=builder /app ./ 
