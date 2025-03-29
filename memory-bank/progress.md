@@ -1,11 +1,11 @@
 # Progress: Shothik AI – Doclyze
 
-**Date:** March 29, 2025
+**Date:** March 30, 2025
 
-**Current Status:** Resolved PDF report generation issues (Puppeteer environment handling, Gemini HTML cleanup). Fixed Next.js API route parameter handling error in `sync-files`. Previous fixes for Vercel deployment and chat streaming remain stable.
+**Current Status:** Resolved build errors caused by a syntax issue (missing brace) in the BoM report route. Previous fixes for PDF report generation (Puppeteer environment handling, Gemini HTML cleanup) and API route parameter handling are confirmed stable. Build is successful.
 
 **What Works:**
--   **Core Setup:** Project structure, Memory Bank, basic pages (Home, Auth, Upload), styling, DB schemas.
+-   **Core Setup:** Project structure, Memory Bank, basic pages (Home, Auth, Upload), styling, DB schemas. Build process successful.
 -   **Authentication:** NextAuth integration, registration, login, logout, session management, page protection. Landing/Login page UI updated.
 -   **File Handling (Vercel Compatibility):**
     -   GCS upload API (`/api/upload`) correctly saves a copy to Vercel's `/tmp` directory.
@@ -24,7 +24,7 @@
     -   Markdown rendering for responses.
 -   **Report Generation (OCR/PDR, BoM, Compliance):**
     -   "OCR Download", "BoM Download", "Compliance Download" buttons on project page.
-    -   Backend API routes (`ocr/`, `bom/`, `compliance/`) implemented using Server-Sent Events (SSE).
+    -   Backend API routes (`ocr/`, `bom/`, `compliance/`) implemented using Server-Sent Events (SSE). Build errors resolved.
     -   APIs now download files directly from GCS, perform OCR & specific report generation via Gemini.
     -   **Gemini HTML Cleanup:** Extraneous Markdown code fences (` ```html `) are removed from Gemini's HTML output before PDF creation.
     -   **PDF Creation (Puppeteer):** Uses conditional configuration (`executablePath`, `args`) for reliable PDF generation in both local dev and Vercel environments.
@@ -32,6 +32,7 @@
     -   Frontend handlers (`handleOcrDownload`, etc.) use `EventSource` for real-time status and opening PDF.
     -   Independent loading/status/error state management for each report button.
     -   Generic error messages shown to user for backend failures.
+-   **Git Configuration:** `.gitignore` updated to exclude problematic paths (`NUL`, external repo).
 
 **What's Left to Build (High Level):**
 -   Thorough testing of Vercel deployment (upload, sync, reports, chat streaming).
@@ -52,4 +53,4 @@
 -   Potential redundancy between Google Vision OCR (on upload) and Gemini OCR (for reports/chat).
 -   Need a strategy for cleaning up temporary report PDFs generated in GCS `temp-reports/` folder.
 
-**Development Plan Phase:** Completed report generation fixes (Puppeteer, Gemini cleanup). Focus remains on testing and stabilization (Phase 6/7).
+**Development Plan Phase:** Completed build error fixes and report generation stabilization. Focus remains on testing and stabilization (Phase 6/7).
