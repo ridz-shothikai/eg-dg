@@ -30,8 +30,9 @@ if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
 }
 
 // POST handler for syncing files to local temp cache
-export async function POST(request, { params }) {
-  const { projectId } = params;
+export async function POST(request, { params }) { // Revert to standard { params } destructuring
+  await request.text(); // Try consuming the request body to ensure context is resolved
+  const { projectId } = params; // Revert to direct destructuring
 
   if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
     return NextResponse.json({ message: 'Invalid Project ID' }, { status: 400 });

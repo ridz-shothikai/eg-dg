@@ -42,3 +42,9 @@ next-env.d.ts
 
 /temp
 /temp/*
+
+# Ignore Windows reserved filenames
+NUL
+
+# Ignore specific embedded/external repository paths
+CUsersuserDocumentsClaudeMCP/

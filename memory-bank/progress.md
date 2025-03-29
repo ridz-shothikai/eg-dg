@@ -1,15 +1,15 @@
 # Progress: Shothik AI – Doclyze
 
-**Date:** March 28, 2025
+**Date:** March 29, 2025
 
-**Current Status:** Addressed Vercel deployment issues (filesystem, Gemini errors). Implemented chat streaming and UI loading indicator update.
+**Current Status:** Resolved PDF report generation issues (Puppeteer environment handling, Gemini HTML cleanup). Fixed Next.js API route parameter handling error in `sync-files`. Previous fixes for Vercel deployment and chat streaming remain stable.
 
 **What Works:**
 -   **Core Setup:** Project structure, Memory Bank, basic pages (Home, Auth, Upload), styling, DB schemas.
 -   **Authentication:** NextAuth integration, registration, login, logout, session management, page protection. Landing/Login page UI updated.
 -   **File Handling (Vercel Compatibility):**
     -   GCS upload API (`/api/upload`) correctly saves a copy to Vercel's `/tmp` directory.
-    -   Sync API (`/api/projects/[projectId]/sync-files`) correctly checks/downloads missing files from GCS to `/tmp`.
+    -   Sync API (`/api/projects/[projectId]/sync-files`) correctly checks/downloads missing files from GCS to `/tmp`. Parameter handling error resolved using `await request.text()` workaround.
     -   Project Detail page triggers background sync on load.
     -   **Crucially:** Report generation and Chat APIs now download files directly from GCS during execution, avoiding reliance on the unreliable `/tmp` cache in serverless functions.
 -   **Diagram Processing:**
@@ -25,14 +25,17 @@
 -   **Report Generation (OCR/PDR, BoM, Compliance):**
     -   "OCR Download", "BoM Download", "Compliance Download" buttons on project page.
     -   Backend API routes (`ocr/`, `bom/`, `compliance/`) implemented using Server-Sent Events (SSE).
-    -   APIs now download files directly from GCS, perform OCR & specific report generation via Gemini, create PDF (`pdf-lib`), upload temporary PDF to GCS, send signed URL via SSE.
+    -   APIs now download files directly from GCS, perform OCR & specific report generation via Gemini.
+    -   **Gemini HTML Cleanup:** Extraneous Markdown code fences (` ```html `) are removed from Gemini's HTML output before PDF creation.
+    -   **PDF Creation (Puppeteer):** Uses conditional configuration (`executablePath`, `args`) for reliable PDF generation in both local dev and Vercel environments.
+    -   Temporary PDF uploaded to GCS, signed URL sent via SSE.
     -   Frontend handlers (`handleOcrDownload`, etc.) use `EventSource` for real-time status and opening PDF.
     -   Independent loading/status/error state management for each report button.
     -   Generic error messages shown to user for backend failures.
 
 **What's Left to Build (High Level):**
 -   Thorough testing of Vercel deployment (upload, sync, reports, chat streaming).
--   Refine PDF formatting for all reports.
+-   Refine PDF formatting/styling for all reports.
 -   Implement Diagram Comparison feature.
 -   Implement Knowledge Hub search functionality.
 -   Implement Admin Panel functionalities.
@@ -42,12 +45,11 @@
 -   Deployment Preparation.
 -   (Lower Priority) Full multiple file upload handling.
 -   (Decision) Clarify if Google Vision OCR is still needed or if Gemini OCR suffices for all features.
--   (External) Implement mechanism to clean up temporary *report* files in GCS. (Local `/tmp` cleanup is less critical now).
+-   (External) Implement mechanism to clean up temporary *report* files in GCS.
 
 **Known Issues:**
--   The `params` warning in Next.js API routes needs monitoring.
 -   PDF report formatting is currently very basic.
 -   Potential redundancy between Google Vision OCR (on upload) and Gemini OCR (for reports/chat).
 -   Need a strategy for cleaning up temporary report PDFs generated in GCS `temp-reports/` folder.
 
-**Development Plan Phase:** Completed Vercel deployment fixes and chat streaming implementation. Focus now shifts to testing and stabilization (Phase 6/7).
+**Development Plan Phase:** Completed report generation fixes (Puppeteer, Gemini cleanup). Focus remains on testing and stabilization (Phase 6/7).

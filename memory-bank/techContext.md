@@ -2,15 +2,16 @@
 
 ## Core Technologies
 
-| Component        | Technology                      | Notes                                                    |
-| :--------------- | :------------------------------ | :------------------------------------------------------- |
-| Frontend/Backend | Next.js (Fullstack)             | Using App Router, API Routes for backend logic.          |
-| Database         | MongoDB                         | Likely hosted on MongoDB Atlas for scalability.          |
-| Storage          | Google Cloud Storage (GCS)      | For storing uploaded diagram files.                      |
-| OCR              | Google Cloud Vision API         | For text extraction from diagrams.                       |
-| AI Model         | Gemini 2.0 via Google AI Studio | For natural language chat and potentially other analysis. |
-| Authentication   | Firebase Auth / NextAuth        | Provides options for email/pass & social logins (Google, GitHub). |
-| Hosting          | Vercel / GCP Cloud Run          | Vercel is ideal for Next.js; Cloud Run as an alternative. |
+| Component        | Technology                      | Notes                                                                                                |
+| :--------------- | :------------------------------ | :--------------------------------------------------------------------------------------------------- |
+| Frontend/Backend | Next.js (Fullstack)             | Using App Router, API Routes for backend logic.                                                      |
+| Database         | MongoDB                         | Likely hosted on MongoDB Atlas for scalability.                                                      |
+| Storage          | Google Cloud Storage (GCS)      | For storing uploaded diagram files.                                                                  |
+| OCR              | Google Cloud Vision API         | For text extraction from diagrams. (Note: Gemini also used for OCR in reports).                      |
+| AI Model         | Gemini 2.0 via Google AI Studio | For natural language chat, report generation (BoM, Compliance, PDR), and potentially other analysis. |
+| Authentication   | Firebase Auth / NextAuth        | Provides options for email/pass & social logins (Google, GitHub).                                    |
+| PDF Generation   | Puppeteer / Chromium            | Uses `puppeteer` (local dev), `puppeteer-core`, and `@sparticuz/chromium` (Vercel) for PDF reports. |
+| Hosting          | Vercel / GCP Cloud Run          | Vercel is ideal for Next.js; Cloud Run as an alternative.                                            |
 
 ## Development Environment & Tooling
 
@@ -19,6 +20,7 @@
 -   **Linting/Formatting:** ESLint (inferred from `eslint.config.mjs`), likely Prettier (standard with Next.js)
 -   **CSS:** Tailwind CSS (inferred from `postcss.config.mjs` and `globals.css`), PostCSS
 -   **Version Control:** Git (assumed standard practice)
+-   **Dev Dependencies:** Includes `puppeteer` for local PDF generation testing.
 
 ## Key Integrations
 
@@ -26,6 +28,7 @@
 -   **Google AI Studio:** Access to Gemini 2.0 model. Requires API key.
 -   **Firebase:** For Authentication. Requires Firebase project setup.
 -   **NextAuth:** Alternative/complementary auth library.
+-   **Puppeteer Ecosystem:** `@sparticuz/chromium` for Vercel compatibility.
 -   **(Future):** AutoCAD, Google Drive, Jira APIs for potential integrations mentioned in goals.
 
 ## Color Palette & Theme

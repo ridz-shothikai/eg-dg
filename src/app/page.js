@@ -42,7 +42,7 @@ const DashboardContent = () => {
           <li>Create projects to organize your diagrams.</li>
           <li>Upload engineering diagrams (PDF, PNG, JPG, DWG, DXF).</li>
           <li>Automatic OCR (Text Extraction) from diagrams.</li>
-          <li>AI-powered analysis and summarization (using Gemini).</li>
+          <li>AI-powered analysis and summarization .</li>
           <li>Bill of Materials (BoM/BoQ) extraction.</li>
           <li>Compliance checking against standards (e.g., IBC).</li>
           <li>Centralized Knowledge Hub for searching across diagrams.</li>

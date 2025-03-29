@@ -7,11 +7,17 @@ import Diagram from '@/models/Diagram';
 import mongoose from 'mongoose';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import mime from 'mime-types';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+// Removed pdf-lib imports
+// import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Storage } from '@google-cloud/storage';
-import fs from 'fs/promises';
+// Removed fs/promises import as it's not used directly here anymore
+// import fs from 'fs/promises';
 import path from 'path';
 import * as constants from '@/constants';
+import puppeteerFull from 'puppeteer'; // For local development
+import chromium from '@sparticuz/chromium'; // For Vercel/serverless
+import puppeteer from 'puppeteer-core'; // Core API used by both
+
 
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
 
@@ -56,6 +62,7 @@ const relaxedSafetySettings = [
 
 // Helper function to call Gemini
 async function callGemini(prompt, fileParts = [], applySafetySettings = false) {
+    // ... (keep existing callGemini function as is)
     if (!gemini) throw new Error("Gemini model not initialized.");
     try {
         const parts = [{ text: prompt }];
@@ -98,203 +105,127 @@ async function callGemini(prompt, fileParts = [], applySafetySettings = false) {
     }
 }
 
-// Helper function to create PDF with final formatting fixes v3
-async function createPdf(text) {
-    const pdfDoc = await PDFDocument.create();
-    const timesRomanFont = await pdfDoc.embedFont(StandardFonts.TimesRoman);
-    const timesRomanBoldFont = await pdfDoc.embedFont(StandardFonts.TimesRomanBold);
-
-    let page = pdfDoc.addPage();
-    const { width, height } = page.getSize();
-    const margin = 50;
-    const textWidth = width - 2 * margin;
-    const indent = 20; // Indentation for content after bold label
-
-    const normalFontSize = 11;
-    const h2FontSize = 16; // For ##
-    const h1FontSize = 20; // For #
-    const normalLineHeight = normalFontSize * 1.2;
-    const h2LineHeight = h2FontSize * 1.2;
-    const h1LineHeight = h1FontSize * 1.2;
-
-    let y = height - margin - h1FontSize; // Start lower for potential main title
-
-    // Clean up input text first
-    let initialCleanedText = (text || '').replace(/```/g, ''); // Remove backticks first
-    // Remove leading "markdown" line, case-insensitive, handling potential whitespace/newlines
-    if (initialCleanedText.trim().toLowerCase().startsWith('markdown')) {
-        initialCleanedText = initialCleanedText.replace(/^\s*markdown\s*(\r?\n)?/i, '');
-    }
-    const cleanedText = initialCleanedText.trim();
-
-    const lines = cleanedText.split(/\r?\n/); // Split by newline, handling Windows/Unix
-
-    // Helper to draw wrapped text (handles line breaking) - simplified
-    function drawWrappedLine(line, options) {
-        const { x, font, size, color, lineHeight: currentLineHeight, availableWidth = textWidth } = options;
-        const words = line.split(/(\s+)/); // Split by spaces, keeping spaces
-        let currentLine = '';
-
-        for (const word of words) {
-            if (!word) continue; // Skip empty strings from split
-
-            const testLine = currentLine + word;
-            let testLineWidth = 0;
-            try {
-                testLineWidth = font.widthOfTextAtSize(testLine, size);
-            } catch (e) {
-                console.warn(`PDF: Skipping word "${word}" due to width error: ${e.message}`);
-                continue;
-            }
-
-            if (testLineWidth < availableWidth) {
-                currentLine = testLine;
-            } else {
-                // Line wrap needed
-                if (y < margin + currentLineHeight) {
-                    page = pdfDoc.addPage();
-                    y = height - margin - size; // Reset y for new page
-                }
-                try {
-                    page.drawText(currentLine.trimEnd(), { x, y, size, font, color, lineHeight: currentLineHeight });
-                    y -= currentLineHeight;
-                } catch (e) {
-                    console.warn(`PDF: Skipping line "${currentLine}" due to draw error: ${e.message}`);
-                }
-                // Start new line with the current word, respecting original x indent
-                currentLine = word.trimStart();
-            }
-        }
-
-        // Draw the last remaining line
-        if (currentLine.trim()) {
-            if (y < margin + currentLineHeight) {
-                page = pdfDoc.addPage();
-                y = height - margin - size; // Reset y for new page
-            }
-            try {
-                page.drawText(currentLine.trimEnd(), { x, y, size, font, color, lineHeight: currentLineHeight });
-                y -= currentLineHeight;
-            } catch (e) {
-                console.warn(`PDF: Skipping final line "${currentLine}" due to draw error: ${e.message}`);
-            }
-        } else if (line.trim() === '') { // Ensure empty lines also advance y
-             y -= currentLineHeight;
-        }
-    } // End of drawWrappedLine helper
-
-    // Process lines from cleaned Gemini output
-    for (const line of lines) {
-        const trimmedLine = line.trim();
-        // More flexible regex for bold label: **Label** : Content or **Label:** Content
-        const boldLabelMatch = trimmedLine.match(/^\*\*(.*?)\s*:\*\*\s*(.*)/);
-
-        // Estimate needed height for page break check
-        let neededHeight = normalLineHeight;
-        if (trimmedLine.startsWith('# ')) neededHeight = h1LineHeight * 1.5;
-        else if (trimmedLine.startsWith('## ')) neededHeight = h2LineHeight * 1.5;
-        else if (boldLabelMatch) neededHeight = normalLineHeight * (boldLabelMatch[2].trim() ? 1.5 : 1); // Extra space if content follows label
-        else if (trimmedLine === '') neededHeight = normalLineHeight;
-
-        // Check page break condition BEFORE drawing anything for the line
-        if (y < margin + neededHeight) {
-             page = pdfDoc.addPage();
-             let resetFontSize = normalFontSize;
-             if (trimmedLine.startsWith('# ')) resetFontSize = h1FontSize;
-             else if (trimmedLine.startsWith('## ')) resetFontSize = h2FontSize;
-             y = height - margin - resetFontSize; // Reset Y based on the type of the first element
-        }
-
-
-        if (trimmedLine.startsWith('# ')) {
-             // --- Handle H1 Heading ---
-             const headingText = trimmedLine.substring(2).trim();
-             y -= h1LineHeight * 0.5; // Space before
-             const textWidthH1 = timesRomanBoldFont.widthOfTextAtSize(headingText, h1FontSize);
-             const centeredX = (width - textWidthH1) / 2;
-             drawWrappedLine(headingText, {
-                 x: Math.max(margin, centeredX),
-                 font: timesRomanBoldFont,
-                 size: h1FontSize,
-                 color: rgb(0, 0, 0),
-                 lineHeight: h1LineHeight
-             });
-             // y is decremented by drawWrappedLine
-
-        } else if (trimmedLine.startsWith('## ')) {
-            // --- Handle H2 Heading ---
-            const headingText = trimmedLine.substring(3).trim();
-             y -= h2LineHeight * 0.5; // Space before
-            drawWrappedLine(headingText, {
-                x: margin,
-                font: timesRomanBoldFont,
-                size: h2FontSize,
-                color: rgb(0, 0, 0),
-                lineHeight: h2LineHeight
-            });
-             // y is decremented by drawWrappedLine
-
-        } else if (boldLabelMatch) {
-            // --- Handle Bold Label Line (Simplified Layout) ---
-            const label = boldLabelMatch[1].trim() + ":"; // Get label, trim, add colon
-            const content = boldLabelMatch[2].trim();
-
-            // Draw label bold at margin
-            page.drawText(label, { x: margin, y: y, font: timesRomanBoldFont, size: normalFontSize, color: rgb(0, 0, 0) });
-            y -= normalLineHeight; // Move down after drawing label
-
-            // Draw content normal, wrapped, starting on the NEXT line, indented
-            if (content) {
-                 if (y < margin + normalLineHeight) { // Check page break for content
-                     page = pdfDoc.addPage();
-                     y = height - margin - normalFontSize;
-                 }
-                 drawWrappedLine(content, {
-                     x: margin + indent, // Indent content
-                     font: timesRomanFont,
-                     size: normalFontSize,
-                     color: rgb(0, 0, 0),
-                     lineHeight: normalLineHeight,
-                     availableWidth: textWidth - indent // Adjust available width for indent
-                 });
-                 // y is decremented by drawWrappedLine
-            }
-             // No extra space needed here, y was already moved down after label or content
-
-        } else if (trimmedLine === '') {
-            // --- Handle Empty line (Paragraph break) ---
-             // drawWrappedLine now handles advancing y for empty lines
-             drawWrappedLine('', { x: margin, font: timesRomanFont, size: normalFontSize, color: rgb(0, 0, 0), lineHeight: normalLineHeight });
-
+// --- NEW: Helper function to create PDF from HTML using Puppeteer ---
+async function createPdfFromHtml(htmlContent) {
+    let browser = null;
+    console.log("Generating PDF from HTML using Puppeteer...");
+    let executablePath = null; // Define outside try block
+    // --- Conditionally determine executablePath ---
+    try {
+        if (process.env.VERCEL) {
+            console.log("Running on Vercel, using @sparticuz/chromium path...");
+            executablePath = await chromium.executablePath(); // For Vercel
         } else {
-            // --- Handle Regular paragraph line ---
-             drawWrappedLine(trimmedLine, {
-                 x: margin,
-                 font: timesRomanFont,
-                 size: normalFontSize,
-                 color: rgb(0, 0, 0),
-                 lineHeight: normalLineHeight
-             });
-              // y is decremented by drawWrappedLine
+            console.log("Running locally, using puppeteer path...");
+            executablePath = puppeteerFull.executablePath(); // For local dev
+        }
+        console.log(`Using Chromium executable path: ${executablePath}`); // Log the path
+    } catch (pathError) {
+        console.error("Error getting Chromium executable path:", pathError);
+        // Provide more context in the error
+        const envType = process.env.VERCEL ? 'Vercel (@sparticuz/chromium)' : 'Local (puppeteer)';
+        throw new Error(`Failed to get Chromium executable path for ${envType}: ${pathError.message}`);
+    }
+    // --- End conditional determination ---
+
+    if (!executablePath) {
+         // This error should be more specific now based on the try-catch above
+         throw new Error("Chromium executable path could not be determined for the current environment.");
+        }
+
+        console.log("Launching browser...");
+        const launchOptions = {
+            defaultViewport: chromium.defaultViewport,
+            executablePath: executablePath, // Use the obtained path
+            headless: chromium.headless, // Use headless mode from sparticuz
+            ignoreHTTPSErrors: true,
+        };
+
+        if (process.env.VERCEL) {
+            console.log("Using Vercel-optimized args for Puppeteer launch.");
+            launchOptions.args = chromium.args;
+        } else {
+            console.log("Using minimal args for local Puppeteer launch.");
+            // Use a minimal set for local dev, or omit entirely to use puppeteer defaults
+            // Example minimal set (adjust if needed):
+            launchOptions.args = ['--no-sandbox', '--disable-setuid-sandbox'];
+        }
+
+        browser = await puppeteer.launch(launchOptions);
+        console.log("Browser launched.");
+
+        const page = await browser.newPage();
+        console.log("New page created.");
+
+        // Add basic styling for better PDF output
+        const styledHtml = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; padding: 20px; color: #333; }
+                    h1, h2, h3 { margin-bottom: 0.5em; margin-top: 1.5em; color: #110927; }
+                    h1 { font-size: 24px; text-align: center; border-bottom: 2px solid #130830; padding-bottom: 10px; margin-bottom: 25px; }
+                    h2 { font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 15px; }
+                    h3 { font-size: 16px; }
+                    p { margin-bottom: 1em; }
+                    ul, ol { margin-left: 20px; margin-bottom: 1em; }
+                    li { margin-bottom: 0.5em; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 1em; margin-bottom: 1em; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+                    th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; vertical-align: top; }
+                    th { background-color: #f8f8f8; font-weight: bold; color: #100926; }
+                    tbody tr:nth-child(even) { background-color: #fdfdfd; }
+                    pre { background-color: #f5f5f5; padding: 10px; border: 1px solid #eee; border-radius: 4px; overflow-x: auto; font-family: 'Courier New', Courier, monospace; }
+                </style>
+            </head>
+            <body>
+                ${htmlContent}
+            </body>
+            </html>
+        `;
+
+        console.log("Setting page content...");
+        await page.setContent(styledHtml, { waitUntil: 'networkidle0' });
+        console.log("Page content set.");
+
+        console.log("Generating PDF bytes...");
+        const pdfBytes = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '1in', right: '1in', bottom: '1in', left: '1in' },
+            preferCSSPageSize: true
+        });
+        console.log("PDF bytes generated.");
+
+        return pdfBytes;
+    } catch (error) {
+        console.error("Error generating PDF from HTML:", error);
+        throw new Error(`Failed to generate PDF using Puppeteer: ${error.message}`);
+    } finally {
+        if (browser !== null) {
+            console.log("Closing browser...");
+            await browser.close();
+            console.log("Browser closed.");
         }
     }
 
-    const pdfBytes = await pdfDoc.save();
-    return pdfBytes;
-}
+// --- END NEW ---
 
 // Function to send SSE messages
-function sendSseMessage(controller, data, event = 'message') {
+function sendSseMessage(controller, data, eventName = 'message') { // Renamed parameter
   const encoder = new TextEncoder();
-  if (event !== 'message') {
-    controller.enqueue(encoder.encode(`event: ${event}\n`));
+  if (eventName !== 'message') { // Updated usage
+    controller.enqueue(encoder.encode(`event: ${eventName}\n`)); // Updated usage
   }
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 }
 
 // GET handler for SSE connection (BoM Report)
 export async function GET(request, { params }) {
-  const { projectId } = params;
+  // Attempt to fix "params should be awaited" warning/error
+  const awaitedParams = await params;
+  const { projectId } = awaitedParams;
 
   if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
     return new Response("Invalid Project ID", { status: 400 });
@@ -305,6 +236,12 @@ export async function GET(request, { params }) {
    if (!storage || !GCS_BUCKET_NAME) {
      return new Response("Backend not ready (GCS config missing)", { status: 503 });
   }
+  // --- NEW: Check if Puppeteer dependencies are available ---
+  if (typeof chromium === 'undefined' || typeof puppeteer === 'undefined') {
+      console.error("Puppeteer/Chromium dependencies missing. Ensure 'puppeteer-core' and '@sparticuz/chromium' are installed.");
+      return new Response("Backend PDF generation components missing.", { status: 503 });
+  }
+  // --- END NEW ---
 
   let session;
   try {
@@ -352,7 +289,6 @@ export async function GET(request, { params }) {
 
             try {
                 sendSseMessage(controller, { status: `Downloading ${diag.fileName} from GCS...` });
-                // Download file content directly into a buffer
                 const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
                 const base64Data = fileBuffer.toString('base64');
                 fileParts.push({ inlineData: { mimeType: mime.lookup(diag.fileName) || 'application/octet-stream', data: base64Data } });
@@ -361,7 +297,6 @@ export async function GET(request, { params }) {
             } catch (downloadError) {
                  console.error(`BoM SSE: Failed to download GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
                  sendSseMessage(controller, { status: `Skipping ${diag.fileName} (download failed)...` });
-                 // Optionally throw an error if any download fails, or just skip
             }
         }
 
@@ -379,27 +314,53 @@ export async function GET(request, { params }) {
         if (!ocrText) throw new Error("OCR process returned empty text.");
         sendSseMessage(controller, { status: 'Text extraction complete.' });
 
-        // --- Step 2: Generate BoM Report ---
-        // **Stronger BoM Prompt**
-        const bomPrompt = `Based on the following OCR text extracted from engineering diagrams (Project: ${project.name}), generate a detailed Bill of Materials (BoM).
-Identify each distinct component mentioned (e.g., beams, columns, pipes, valves, resistors, specific part numbers).
-For each component, extract its quantity, dimensions (if specified), material (if specified), and any other relevant specifications found in the text.
-Present the BoM in a clear, structured format, preferably like a table or a list with consistent fields for each item (Item Name, Quantity, Dimensions, Material, Specifications/Notes). Be comprehensive and accurate.
+        // --- Step 2: Generate BoM Report as HTML ---
+        // --- UPDATED PROMPT ---
+        const bomPrompt = `Based on the following OCR text extracted from engineering diagrams (Project: ${project.name}), generate a detailed Bill of Materials (BoM) in **HTML format**.
 
-OCR Text:
+**Instructions for HTML Structure:**
+1.  Present the BoM primarily as an HTML table (\`<table>\`) with a clear header row (\`<thead>\` containing \`<th>\` elements) and data rows (\`<tbody>\` containing \`<tr>\` with \`<td>\` elements).
+2.  Use appropriate table headers like "Item Name", "Quantity", "Dimensions", "Material", "Specifications/Notes", or similar relevant fields based on the extracted data.
+3.  Include other relevant information (like project name, date, etc.) using standard HTML tags like \`<h1>\`, \`<h2>\`, \`<p>\`.
+4.  Do **NOT** include any Markdown syntax (like \`**\`, \`#\`, \`-\`, \`|\`) in the final HTML output.
+5.  Ensure the entire output is a single, valid HTML document body content (you don't need to include \`<html>\` or \`<head>\` tags yourself, just the content that would go inside \`<body>\`).
+
+**Content Focus:**
+*   Identify each distinct component mentioned.
+*   Extract quantity, dimensions, material, and other specifications for each component.
+*   Be comprehensive and accurate based *only* on the provided OCR text.
+
+**OCR Text:**
 ---
 ${ocrText}
 ---
 
-Generate the Bill of Materials now.`;
-        sendSseMessage(controller, { status: 'Generating Bill of Materials...' });
-        const bomReportText = await callGemini(bomPrompt, [], false); // Default safety
-        if (!bomReportText) throw new Error("BoM generation process returned empty text.");
+Generate the Bill of Materials report in HTML format now.`;
+        // --- END UPDATED PROMPT ---
+
+        sendSseMessage(controller, { status: 'Generating Bill of Materials (HTML)...' });
+        let bomReportHtml = await callGemini(bomPrompt, [], false); // Default safety
+        if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML.");
+
+        // --- Clean up Gemini's Markdown code fences ---
+        console.log("Cleaning Gemini HTML output...");
+        bomReportHtml = bomReportHtml.trim(); // Remove leading/trailing whitespace
+        if (bomReportHtml.startsWith('```html')) {
+            bomReportHtml = bomReportHtml.substring(7).trimStart(); // Remove ```html and leading newline/space
+        }
+        if (bomReportHtml.endsWith('```')) {
+            bomReportHtml = bomReportHtml.substring(0, bomReportHtml.length - 3).trimEnd(); // Remove ``` and trailing newline/space
+        }
+        console.log("HTML output cleaned.");
+        // --- End cleanup ---
+
         sendSseMessage(controller, { status: 'BoM generated.' });
 
-        // --- Step 3: Create PDF ---
-        sendSseMessage(controller, { status: 'Creating PDF document...' });
-        const pdfBytes = await createPdf(bomReportText);
+        // --- Step 3: Create PDF from HTML ---
+        // --- UPDATED CALL ---
+        sendSseMessage(controller, { status: 'Creating PDF document from HTML...' });
+        const pdfBytes = await createPdfFromHtml(bomReportHtml);
+        // --- END UPDATED CALL ---
         sendSseMessage(controller, { status: 'PDF created.' });
 
         // --- Step 4: Upload PDF to GCS (Temporary) ---

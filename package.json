@@ -12,6 +12,7 @@
     "@google-cloud/storage": "^7.15.2",
     "@google-cloud/vision": "^5.1.0",
     "@google/generative-ai": "^0.24.0",
+    "@sparticuz/chromium": "^133.0.0",
     "axios": "^1.8.4",
     "bcrypt": "^5.1.1",
     "mime-types": "^3.0.1",
@@ -19,6 +20,7 @@
     "next": "15.2.4",
     "next-auth": "^4.24.11",
     "pdf-lib": "^1.17.1",
+    "puppeteer-core": "^24.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-dropzone": "^14.3.8",
@@ -30,6 +32,7 @@
     "@tailwindcss/postcss": "^4.0.17",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
+    "puppeteer": "^24.4.0",
     "tailwindcss": "^4"
   }
 }

@@ -40,8 +40,19 @@ graph TD
     *   The backend API returns a `ReadableStream` to the frontend.
     *   The frontend reads the stream and updates the UI incrementally.
     *   The backend saves the full conversation to MongoDB after the stream completes.
-7.  **BoM/BoQ Generation:** The backend API route downloads relevant diagrams from GCS, uses Gemini for analysis (potentially including OCR), formats the result, creates a temporary PDF, uploads it to GCS, and returns a signed URL via SSE.
-8.  **Compliance Check:** Similar flow to BoM generation, but uses compliance rules and specific prompts for Gemini analysis.
+7.  **BoM/BoQ Generation:**
+    *   The backend API route downloads relevant diagrams from GCS.
+    *   Uses Gemini for analysis (potentially including OCR) to generate report content in HTML format.
+    *   **Cleans the generated HTML** to remove extraneous formatting (e.g., Markdown code fences) added by Gemini.
+    *   Creates a temporary PDF from the cleaned HTML using Puppeteer.
+    *   Uploads the temporary PDF to GCS.
+    *   Returns a signed URL for the PDF via Server-Sent Events (SSE).
+8.  **Compliance Check:**
+    *   Similar flow to BoM generation, but uses compliance rules and specific prompts for Gemini analysis to generate an HTML report.
+    *   **Cleans the generated HTML** to remove extraneous formatting (e.g., Markdown code fences) added by Gemini.
+    *   Creates a temporary PDF from the cleaned HTML using Puppeteer.
+    *   Uploads the temporary PDF to GCS.
+    *   Returns a signed URL for the PDF via Server-Sent Events (SSE).
 9.  **Version Comparison:** The backend compares metadata and potentially visual representations (requiring further definition) of two diagram versions stored in MongoDB/GCS.
 10. **Knowledge Hub:** Leverages MongoDB's search capabilities (potentially Atlas Search for NLP queries) to query historical project data.
 
@@ -63,6 +74,8 @@ graph TD
 -   **Scalability:** Leveraging serverless functions (Vercel/Cloud Run) and managed cloud services (GCS, MongoDB Atlas, Cloud Vision, AI Studio) aids scalability.
 -   **Modularity:** Features like OCR, Chat, BoM generation, and Compliance are distinct modules interacting via the backend API layer.
 -   **Data Structure:** A well-defined MongoDB schema is crucial for linking diagrams, parsed data, user context, and project information effectively.
--   **Error Handling:** Robust error handling is needed for external API calls (Vision, Gemini), file processing, GCS operations, and stream handling.
+-   **Error Handling:** Robust error handling is needed for external API calls (Vision, Gemini), file processing, GCS operations, stream handling, and PDF generation.
 -   **Security:** Authentication and authorization (role-based access) are critical, especially for admin functions and project data access.
 -   **Serverless File Handling:** API routes requiring file content (reports, chat) must download files directly from GCS during execution due to the ephemeral nature of the `/tmp` directory in Vercel's serverless environment. Relying on a separate sync process to populate `/tmp` is unreliable.
+-   **Environment-Specific Configuration:** PDF generation using Puppeteer requires different configurations (executable path, launch arguments) for local development versus serverless deployment (Vercel) to ensure stability and compatibility. Conditional logic based on `process.env.VERCEL` is used.
+-   **API Response Cleaning:** Responses from external APIs (like Gemini) may require cleaning/parsing to remove extraneous formatting (e.g., Markdown code fences) before further processing or display.
