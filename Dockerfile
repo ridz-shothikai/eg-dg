@@ -36,7 +36,8 @@ RUN apk add --no-cache \
 # Download and unzip specific Chromium revision compatible with @sparticuz/chromium v133
 # Find compatible revisions: https://github.com/Sparticuz/chromium/releases
 # Using a known good revision URL (adjust if needed based on exact compatibility)
-ENV CHROMIUM_REVISION=133.0.6998.35
+# Trying a different build number for v133
+ENV CHROMIUM_REVISION=133.0.6911.0
 # Updated URL to official chrome-for-testing storage
 RUN wget --no-verbose https://storage.googleapis.com/chrome-for-testing-public/${CHROMIUM_REVISION}/linux64/chrome-linux64.zip -P /tmp \
     && unzip /tmp/chrome-linux64.zip -d /opt \

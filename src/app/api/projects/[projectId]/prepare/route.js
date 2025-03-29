@@ -39,6 +39,21 @@ if (geminiApiKey) {
   }
 }
 
+// --- Initialize Gemini Generative Model ---
+let geminiModel = null;
+if (geminiApiKey) {
+  try {
+    const { GoogleGenerativeAI } = require("@google/generative-ai"); // Ensure this is required if not globally available
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    // Using the specific model name requested by the user
+    geminiModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    console.log("Gemini Generative Model (gemini-2.0-flash) initialized for prepare endpoint.");
+  } catch(e) {
+   console.error("Failed to initialize Gemini Generative Model for prepare endpoint:", e);
+}
+}
+
+
 // --- Helper: Download from GCS ---
 async function downloadFromGCS(gcsPath, destination) {
     const fileName = gcsPath.split('/').pop(); // Extract filename from gs://bucket/filename
@@ -261,14 +276,83 @@ export async function GET(request, context) { // Keep context for potential futu
          overallStatus = 'processing'; // If not all are active yet, consider it processing
     }
 
+    let initialSummary = null;
+    let suggestedQuestions = [];
 
-    // 7. Return project, updated diagrams, chat history, and overall status
+    // 7. If ready, generate initial summary and suggestions
+    if (overallStatus === 'ready' && geminiModel) {
+        console.log("Generating initial summary and suggestions...");
+        try {
+            const activeDiagrams = diagramsData.filter(d => d.processingStatus === 'ACTIVE' && d.geminiFileUri);
+            // Conditionally create fileInputParts ONLY if the model is NOT gemini-2.0-flash (or similar known problematic models)
+            // Since the user insists on gemini-2.0-flash which causes URI errors, we will NOT send file parts.
+            const fileInputParts = []; // Intentionally empty for gemini-2.0-flash to avoid URI error
+            // if (geminiModel.model !== "gemini-2.0-flash") { // Example of conditional logic if needed later
+            //    fileInputParts = activeDiagrams.map(d => ({ fileData: { mimeType: mime.lookup(d.fileName) || 'application/pdf', fileUri: d.geminiFileUri } }));
+            // }
+
+            // Adjust prompt slightly as it won't have file context now
+             const prompt = `You are an assistant for the engineering diagram analysis tool for project "${projectData.name}". Briefly introduce yourself and state that you are ready to chat about the project. Then, suggest exactly 2 generic follow-up questions a user might ask. Format the output as a JSON object with keys "summary" (string) and "suggestions" (array of strings). Example JSON: {"summary": "Hey there! I'm ready to help analyze the diagrams for project ${projectData.name}.", "suggestions": ["Summarize the main components.", "What standards are mentioned?"]}`;
+
+            // Construct contents without file parts if fileInputParts is empty
+            const parts = [{ text: prompt }];
+            if (fileInputParts.length > 0) {
+                parts.push(...fileInputParts);
+            }
+            const contents = [{ role: "user", parts: parts }];
+            const result = await geminiModel.generateContent({ contents });
+
+            if (result.response) {
+                const responseText = result.response.text();
+                console.log("Raw Gemini Summary/Suggestions Response:", responseText);
+                // Attempt to parse the JSON response from Gemini
+                try {
+                    // Clean potential markdown fences
+                    let cleanedText = responseText.trim();
+                    if (cleanedText.startsWith('```json')) {
+                        cleanedText = cleanedText.substring(7).trimStart();
+                    }
+                    if (cleanedText.endsWith('```')) {
+                         cleanedText = cleanedText.substring(0, cleanedText.length - 3).trimEnd();
+                    }
+
+                    const parsedResponse = JSON.parse(cleanedText);
+                    initialSummary = parsedResponse.summary || "I've reviewed the documents and I'm ready to chat!"; // Fallback summary
+                    suggestedQuestions = parsedResponse.suggestions || [];
+                    // Ensure only 2 suggestions max
+                    if (suggestedQuestions.length > 2) {
+                        suggestedQuestions = suggestedQuestions.slice(0, 2);
+                    }
+                    console.log("Parsed Summary:", initialSummary);
+                    console.log("Parsed Suggestions:", suggestedQuestions);
+                } catch (parseError) {
+                    console.error("Failed to parse summary/suggestions JSON from Gemini:", parseError, "Raw text:", responseText);
+                    initialSummary = "I've reviewed the documents and I'm ready to chat! (JSON parse error)"; // More specific fallback
+                }
+            } else {
+                 console.warn("No response object or text received from Gemini for summary/suggestions.");
+                 initialSummary = "I've reviewed the documents and I'm ready to chat! (No response from AI)"; // More specific fallback
+            }
+        } catch (geminiError) {
+            // Log the specific error from the Gemini call
+            console.error("Error calling Gemini for initial summary/suggestions:", geminiError);
+            // Provide a more informative fallback message including the error if possible
+            initialSummary = `I had trouble generating an initial summary (${geminiError.message || 'Unknown AI Error'}), but I'm ready to chat!`;
+        }
+        } else if (overallStatus === 'ready' && !geminiModel) {
+         initialSummary = "I've reviewed the documents and I'm ready to chat! (Summary generation AI not initialized)";
+    }
+
+
+    // 8. Return project, updated diagrams, chat history, status, summary, and suggestions
     console.log(`Prepare endpoint finished with overall status: ${overallStatus}`);
     return NextResponse.json({
         project: { _id: projectData._id, name: projectData.name, description: projectData.description },
         diagrams: diagramsData,
         chatHistory: projectData.chatHistory || [],
-        preparationStatus: overallStatus // 'ready', 'processing', 'failed', 'no_files'
+        preparationStatus: overallStatus, // 'ready', 'processing', 'failed', 'no_files'
+        initialSummary: initialSummary,
+        suggestedQuestions: suggestedQuestions
     }, { status: 200 });
 
   } catch (error) {

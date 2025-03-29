@@ -28,6 +28,8 @@ export default function ProjectDetailPage() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatError, setChatError] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null); // State to track copied message index
+  const [initialSummary, setInitialSummary] = useState(null); // State for initial summary
+  const [suggestedQuestions, setSuggestedQuestions] = useState([]); // State for suggestions
 
   // Refactored Report States
   const [reportStates, setReportStates] = useState({
@@ -129,7 +131,13 @@ export default function ProjectDetailPage() {
         const response = await fetch(`/api/projects/${projectId}/prepare`);
         if (!response.ok) { const d = await response.json().catch(()=>({})); throw new Error(d.message || `Failed: ${response.status}`); }
         const data = await response.json();
-        setProject(data.project); setDiagrams(data.diagrams || []); setChatHistory(data.chatHistory || []); setPreparationStatus(data.preparationStatus || 'failed');
+        setProject(data.project);
+        setDiagrams(data.diagrams || []);
+        setChatHistory(data.chatHistory || []);
+        setPreparationStatus(data.preparationStatus || 'failed');
+        setInitialSummary(data.initialSummary || null); // Set initial summary
+        setSuggestedQuestions(data.suggestedQuestions || []); // Set suggested questions
+
         if (data.diagrams?.length > 0) {
           console.log("Triggering background file sync...");
           fetch(`/api/projects/${projectId}/sync-files`, { method: 'POST' })
@@ -273,6 +281,17 @@ export default function ProjectDetailPage() {
     });
   };
 
+  // --- Handler for Suggested Question Click ---
+  const handleSuggestionClick = (question) => {
+    if (isChatLoading || preparationStatus !== 'ready') return; // Don't allow if chat is busy or not ready
+    setChatInput(question);
+    // Use a timeout to allow state to update before sending message
+    setTimeout(() => {
+        handleSendMessage();
+    }, 0);
+  };
+  // --- End Handler ---
+
   // --- Render Logic ---
   if (loading || status === 'loading') return <div className="flex-grow flex items-center justify-center bg-gray-900"><LoadingSpinner text="Loading project..." /></div>; // Restored text prop
   if (error && preparationStatus === 'failed') return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Error: {error}</div>;
@@ -377,6 +396,31 @@ export default function ProjectDetailPage() {
             <React.Fragment>
               {/* Inner container for chat history, allow vertical scroll */}
               <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4"> {/* Added mb-4 */}
+                {/* Display Initial Summary if available and history is empty */}
+                {initialSummary && chatHistory.length === 0 && (
+                  <div className="flex flex-col items-start"> {/* Model message style */}
+                    <div className="p-3 rounded-lg max-w-lg prose prose-invert bg-gray-600 text-white">
+                       <ReactMarkdown>{initialSummary}</ReactMarkdown>
+                    </div>
+                    {/* Suggested Questions Buttons */}
+                    {suggestedQuestions.length > 0 && (
+                      <div className="mt-3 flex flex-col space-y-2 self-start w-full max-w-lg">
+                        {suggestedQuestions.map((q, i) => (
+                          <button
+                            key={i}
+                            onClick={() => handleSuggestionClick(q)}
+                            disabled={isChatLoading}
+                            className="bg-gray-700 hover:bg-gray-600 text-indigo-300 text-sm text-left p-2 rounded border border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Display Regular Chat History */}
                 {chatHistory.map((msg, index) => {
                   const isModel = msg.role === 'model';
                   // Check if this specific message is the loading placeholder
