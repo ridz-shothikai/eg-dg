@@ -39,3 +39,5 @@ jobs:
           docker build --no-cache --tag ghcr.io/ridz-shothikai/eg-dg:${{ env.SHORT_SHA }} --build-arg GITHUB_PAT=${{ secrets.ACCESS_TOKEN }} . 
           docker push ghcr.io/ridz-shothikai/eg-dg:${{ env.SHORT_SHA }}
           
+  
+  
