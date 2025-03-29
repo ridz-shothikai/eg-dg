@@ -19,8 +19,17 @@ WORKDIR /app
 # Set NODE_ENV to production for the runtime environment
 ENV NODE_ENV=production
 
+# Install necessary dependencies for Puppeteer/Chromium on Alpine
+# See: https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md#running-puppeteer-on-alpine
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ttf-freefont
+
 # Copy built app from the builder stage
-COPY --from=builder /app ./ 
+COPY --from=builder /app ./
 
 # Expose port 3000 for Next.js
 EXPOSE 3000
