@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      target: development # Target the development stage in the Dockerfile
+    env_file:
+      - .env # Load environment variables from .env file
+    ports:
+      - "3000:3000" # Map host port 3000 to container port 3000
+    volumes:
+      # Mount the local source code into the container
+      # Exclude node_modules to use the ones installed in the container
+      - .:/app
+      - /app/node_modules
+      # Mount the .next directory as a volume to persist build cache if needed
+      - /app/.next
+    # Ensure the container stays running in development mode
+    # stdin_open and tty are often needed for interactive dev servers
+    stdin_open: true
+    tty: true

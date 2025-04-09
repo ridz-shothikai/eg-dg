@@ -5,7 +5,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import * as constants from '@/constants';
 import connectMongoDB from '@/lib/db';
 import User from '@/models/User';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 const { MONGODB_URI, NEXTAUTH_SECRET } = constants;
 

@@ -12,15 +12,18 @@
 | Authentication   | Firebase Auth / NextAuth        | Provides options for email/pass & social logins (Google, GitHub).                                    |
 | PDF Generation   | Puppeteer / Chromium            | Uses `puppeteer` (local dev), `puppeteer-core`, and `@sparticuz/chromium` (Vercel) for PDF reports. |
 | Hosting          | Vercel / GCP Cloud Run          | Vercel is ideal for Next.js; Cloud Run as an alternative.                                            |
+| Local Dev Env    | Docker Compose & Dockerfile     | Uses `docker-compose.yml` targeting the `development` stage in `Dockerfile` for local setup.         |
 
 ## Development Environment & Tooling
 
 -   **Language:** JavaScript (as inferred from Next.js setup files like `.js`, `.mjs`)
 -   **Package Manager:** npm (inferred from `package-lock.json`)
--   **Linting/Formatting:** ESLint (inferred from `eslint.config.mjs`), likely Prettier (standard with Next.js)
--   **CSS:** Tailwind CSS (inferred from `postcss.config.mjs` and `globals.css`), PostCSS
+-   **Next.js Version:** 15.2.4 (Major update)
+-   **React Version:** 19.0.0 (Major update)
+-   **Linting/Formatting:** ESLint (v9), `eslint-config-next` (v15.2.4)
+-   **CSS:** Tailwind CSS (v4 - Major update), PostCSS
 -   **Version Control:** Git (assumed standard practice)
--   **Dev Dependencies:** Includes `puppeteer` for local PDF generation testing.
+-   **Dev Dependencies:** Includes `puppeteer` (v24.4.0) for local PDF generation testing.
 
 ## Key Integrations
 

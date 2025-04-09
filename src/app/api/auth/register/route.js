@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import User from '@/models/User';
 import { NextResponse } from 'next/server';
 import * as constants from '@/constants';
