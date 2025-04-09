@@ -9,7 +9,8 @@
 		"dockerfile": "../Dockerfile"
 	},
 	"features": {
-		"ghcr.io/devcontainers-extra/features/node-asdf:0": {}
+		"ghcr.io/devcontainers-extra/features/node-asdf:0": {},
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
 	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.

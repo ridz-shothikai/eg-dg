@@ -12,9 +12,9 @@ import mime from 'mime-types';
 import { Storage } from '@google-cloud/storage';
 import path from 'path'; // Still needed for keyfile path
 import * as constants from '@/constants';
-import puppeteerFull from 'puppeteer'; // For local development
-import chromium from '@sparticuz/chromium'; // For Vercel/serverless
-import puppeteer from 'puppeteer-core'; // Core API used by both
+import puppeteer from 'puppeteer-core'; // Use puppeteer-core
+// Removed: import puppeteer from 'puppeteer';
+// Removed: import chromium from '@sparticuz/chromium';
 
 
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
@@ -112,29 +112,20 @@ async function createPdfFromHtml(htmlContent) {
         // await chromium.font('https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf'); // Add necessary fonts if needed
 
         // --- Determine executablePath and args ---
-        // Use environment variable set in Dockerfile if available, otherwise use local puppeteer
-        const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteerFull.executablePath();
-        // Use minimal args for both local and production (safer default)
-        // @sparticuz/chromium args might be too aggressive or unnecessary if Chromium is installed via apk/wget
+        // Use system-installed Chromium on Alpine
+        const executablePath = '/usr/bin/chromium-browser';
         const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
-
-        console.log(`Using Chromium executable path: ${executablePath}`);
+        console.log(`Using system Chromium executable path: ${executablePath}`);
         console.log(`Using launch args: ${JSON.stringify(launchArgs)}`);
         // --- End determination ---
-
-        if (!executablePath) {
-             throw new Error("Chromium executable path could not be determined.");
-            }
 
             console.log("Launching browser...");
             const launchOptions = {
                 args: launchArgs,
-                // defaultViewport: chromium.defaultViewport, // Use Puppeteer's default
-                executablePath: executablePath,
-                headless: true, // Default to headless true
+                executablePath: executablePath, // Specify path
+                headless: true,
                 ignoreHTTPSErrors: true,
             };
-        // The args are already set correctly within the isProduction check above
 
         browser = await puppeteer.launch(launchOptions);
         console.log("Browser launched.");
@@ -229,13 +220,7 @@ export async function GET(request, { params }) {
    if (!storage || !GCS_BUCKET_NAME) {
      return new Response("Backend not ready (GCS)", { status: 503 });
   }
-  // --- NEW: Check if Puppeteer dependencies are available ---
-  if (typeof chromium === 'undefined' || typeof puppeteer === 'undefined') {
-      console.error("Puppeteer/Chromium dependencies missing. Ensure 'puppeteer-core' and '@sparticuz/chromium' are installed.");
-      return new Response("Backend PDF generation components missing.", { status: 503 });
-  }
-  // --- END NEW ---
-
+  // Removed check for chromium/puppeteer-core
 
   // --- Auth Check ---
   let session;
