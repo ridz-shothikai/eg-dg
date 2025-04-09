@@ -219,7 +219,7 @@ export default function ProjectDetailPage() {
 
     useEffect(() => {
       let attempts = 0;
-      const maxAttempts = 20;
+      const maxAttempts = 50;
     
       const handleResize = () => {
         if (chatContainerRef.current) {

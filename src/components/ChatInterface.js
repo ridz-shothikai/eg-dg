@@ -36,7 +36,7 @@ export default function ChatInterface({
   onCopy, // Pass copy handler function
   chatAreaWidthState
 }) {
-  
+  const chatContainerRef = useRef(null); // Ref for the scrollable chat history container
   const [customPrompts, setCustomPrompts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [promptsLoading, setPromptsLoading] = useState(true); // Loading state for prompts
@@ -64,12 +64,12 @@ export default function ChatInterface({
     fetchPrompts();
   }, []); // Empty dependency array means run once on mount
 
-  // Effect for auto-scrolling chat
-  // useEffect(() => {
-  //   if (chatContainerRef.current) {
-  //     chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-  //   }
-  // }, [chatHistory]); // Trigger scroll on history change
+  // Effect for auto-scrolling chat to the bottom on new messages
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatHistory]); // Trigger scroll whenever chatHistory changes
 
   // --- Handler for executing custom prompt ---
   const handleExecuteCustomPrompt = (promptText) => {
@@ -99,7 +99,8 @@ export default function ChatInterface({
       {preparationStatus === 'ready' && (
         <>
           {/* Inner container for chat history - THIS part scrolls */}
-          <div  style={{ maxHeight: "calc(100vh - 150px)" }} className="overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"          > 
+          {/* Added ref={chatContainerRef} and updated scrollbar styles */}
+          <div ref={chatContainerRef} style={{ maxHeight: "calc(100vh - 210px)" }} className="overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-900 scrollbar-thumb-rounded">
             <div style={{ paddingBottom:100 }} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4 ">
               {/* Display Initial Summary if available and history is empty */}
               {initialSummary && chatHistory.length === 0 && (
