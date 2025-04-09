@@ -98,7 +98,8 @@ export default function HomePage() {
               <div className="bg-[#100926] p-8 rounded-lg shadow-xl border border-[#130830]">
                 <h2 className="text-2xl font-semibold mb-4 text-center text-white">Upload to Start Analyzing</h2>
                 <div className="max-w-md mx-auto">
-                  <label htmlFor="guest-file-upload" className="flex justify-center w-full h-32 px-4 transition bg-[#110927] border-2 border-[#130830] border-dashed rounded-md appearance-none cursor-pointer hover:border-gray-600 focus:outline-none items-center text-center">
+                  {/* Changed border color to white */}
+                  <label htmlFor="guest-file-upload" className="flex justify-center w-full h-32 px-4 transition bg-[#110927] hover:bg-[#130830] border-2 border-white border-dashed rounded-md appearance-none cursor-pointer focus:outline-none items-center text-center">
                     <span className="flex items-center space-x-2">
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />

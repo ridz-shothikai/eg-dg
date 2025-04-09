@@ -18,11 +18,11 @@ export default function RootLayout({ children }) {
             {/* Sidebar renders conditionally based on route/auth status */}
             <Sidebar />
             {/* Main content area takes remaining space - Removed w-full */}
-            <div className="flex-grow flex flex-col"> {/* Wrapper for header + main content */}
+            <div className="flex-grow flex flex-col"> {/* Wrapper for header + main content - Removed overflow-hidden */}
               {/* Header renders conditionally based on route/auth status */}
               <Header />
-              {/* Ensure main content area can scroll independently - Removed flex-grow */}
-              <main className="overflow-y-auto"> {/* Removed flex-grow */}
+              {/* Ensure main content area grows and can scroll independently */}
+              <main className="flex-grow overflow-y-auto"> {/* Added overflow-y-auto back */}
                 {children}
               </main>
             </div>

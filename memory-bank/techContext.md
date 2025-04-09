@@ -10,7 +10,7 @@
 | OCR              | Google Cloud Vision API         | For text extraction from diagrams. (Note: Gemini also used for OCR in reports).                      |
 | AI Model         | Gemini 2.0 via Google AI Studio | For natural language chat, report generation (BoM, Compliance, PDR), and potentially other analysis. |
 | Authentication   | Firebase Auth / NextAuth        | Provides options for email/pass & social logins (Google, GitHub).                                    |
-| PDF Generation   | Puppeteer / Chromium            | Uses `puppeteer` (local dev), `puppeteer-core`, and `@sparticuz/chromium` (Vercel) for PDF reports. |
+| PDF Generation   | External API                    | Uses `https://html-text-to-pdf.shothik.ai/convert` for BoM, Compliance, OCR/PDR reports.             |
 | Hosting          | Vercel / GCP Cloud Run          | Vercel is ideal for Next.js; Cloud Run as an alternative.                                            |
 | Local Dev Env    | Docker Compose & Dockerfile     | Uses `docker-compose.yml` targeting the `development` stage in `Dockerfile` for local setup.         |
 
@@ -31,7 +31,7 @@
 -   **Google AI Studio:** Access to Gemini 2.0 model. Requires API key.
 -   **Firebase:** For Authentication. Requires Firebase project setup.
 -   **NextAuth:** Alternative/complementary auth library.
--   **Puppeteer Ecosystem:** `@sparticuz/chromium` for Vercel compatibility.
+-   **HTML-to-PDF API:** `https://html-text-to-pdf.shothik.ai/convert` for report generation.
 -   **(Future):** AutoCAD, Google Drive, Jira APIs for potential integrations mentioned in goals.
 
 ## Color Palette & Theme
