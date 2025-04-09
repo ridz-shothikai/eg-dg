@@ -28,9 +28,13 @@ graph TD
 
 ## Key Components & Flow
 
-1.  **Authentication:** Users log in/sign up via Firebase Auth or NextAuth (Email/Password, Google, GitHub).
-2.  **File Upload:** Diagrams (PDF, PNG, JPG, DWG, DXF) are uploaded via the Next.js frontend, sent to the backend API.
-3.  **Storage:** The backend API stores the raw file in Google Cloud Storage (GCS) and creates a record in MongoDB.
+1.  **Authentication & Guest Access:**
+    *   **Registered Users:** Log in/sign up via NextAuth (Email/Password, potentially Google/GitHub later). Session managed by `next-auth`.
+    *   **Guest Users:** No explicit login. A unique `guestId` is generated on first interaction (e.g., upload) and stored in the browser's `localStorage`. This `guestId` is sent via a custom `X-Guest-ID` header for API requests requiring temporary authorization.
+2.  **File Upload:**
+    *   **Guest Upload (Landing Page):** Diagrams uploaded via the root page (`/`). Frontend generates/retrieves `guestId` from `localStorage`. Backend API (`/api/projects`) creates a `Project` with `owner: null` and `guestOwnerId` set to the provided `guestId`. Backend API (`/api/upload`) saves the file to GCS, creates a `Diagram` record linked to the project, setting `uploadedBy: null` and `guestUploaderId` to the `guestOwnerId` from the project. User is redirected to `/project/[projectId]`.
+    *   **Authenticated Upload (Project Page):** Diagrams uploaded within a specific project context (`/project/[projectId]/upload`). Backend APIs use the user's session ID to set `owner` and `uploadedBy`.
+3.  **Storage:** The backend API stores the raw file in Google Cloud Storage (GCS) and creates a `Project`/`Diagram` record in MongoDB.
 4.  **OCR Processing:** The backend triggers Google Cloud Vision API on the stored file.
 5.  **Data Extraction & Storage:** Parsed text and identified components from OCR are processed by the backend and stored in a structured format in MongoDB, linked to the diagram record.
 6.  **Chat Interaction:**
@@ -39,35 +43,56 @@ graph TD
     *   The file data and user query (plus history) are sent to the Gemini 2.0 API using its streaming methods (`generateContentStream`/`sendMessageStream`).
     *   The backend API returns a `ReadableStream` to the frontend.
     *   The frontend reads the stream and updates the UI incrementally.
-    *   The backend saves the full conversation to MongoDB after the stream completes.
+    *   The backend saves the full conversation to the `Project` document in MongoDB after the stream completes.
+    *   **Authorization:** API checks for `next-auth` session first. If none, checks for `X-Guest-ID` header and validates against `project.guestOwnerId`.
 7.  **BoM/BoQ Generation:**
+    *   **Authorization:** API checks for `next-auth` session first. If none, checks for `X-Guest-ID` header and validates against `project.guestOwnerId`.
     *   The backend API route downloads relevant diagrams from GCS.
     *   Uses Gemini for analysis (potentially including OCR) to generate report content in HTML format.
     *   **Cleans the generated HTML** to remove extraneous formatting (e.g., Markdown code fences) added by Gemini.
-    *   Creates a temporary PDF from the cleaned HTML using Puppeteer.
-    *   Uploads the temporary PDF to GCS.
-    *   Returns a signed URL for the PDF via Server-Sent Events (SSE).
+    *   **Calls external HTML-to-PDF API** (`https://html-text-to-pdf.shothik.ai/convert`) with the cleaned HTML.
+    *   Receives a public PDF URL from the external API.
+    *   Returns the `public_url` via Server-Sent Events (SSE).
 8.  **Compliance Check:**
+    *   **Authorization:** API checks for `next-auth` session first. If none, checks for `X-Guest-ID` header and validates against `project.guestOwnerId`.
     *   Similar flow to BoM generation, but uses compliance rules and specific prompts for Gemini analysis to generate an HTML report.
     *   **Cleans the generated HTML** to remove extraneous formatting (e.g., Markdown code fences) added by Gemini.
-    *   Creates a temporary PDF from the cleaned HTML using Puppeteer.
-    *   Uploads the temporary PDF to GCS.
-    *   Returns a signed URL for the PDF via Server-Sent Events (SSE).
-9.  **Version Comparison:** The backend compares metadata and potentially visual representations (requiring further definition) of two diagram versions stored in MongoDB/GCS.
-10. **Knowledge Hub:** Leverages MongoDB's search capabilities (potentially Atlas Search for NLP queries) to query historical project data.
+    *   **Calls external HTML-to-PDF API** (`https://html-text-to-pdf.shothik.ai/convert`) with the cleaned HTML.
+    *   Receives a public PDF URL from the external API.
+    *   Returns the `public_url` via Server-Sent Events (SSE).
+9.  **OCR/PDR Report Generation:** (Similar flow to BoM/Compliance)
+    *   **Authorization:** API checks for `next-auth` session first. If none, checks for `X-Guest-ID` header and validates against `project.guestOwnerId`.
+    *   The backend API route downloads relevant diagrams from GCS.
+    *   Uses Gemini for OCR and then to generate a Preliminary Design Report (PDR) in HTML format based on the OCR text.
+    *   **Cleans the generated HTML** to remove extraneous formatting (e.g., Markdown code fences) added by Gemini.
+    *   **Calls external HTML-to-PDF API** (`https://html-text-to-pdf.shothik.ai/convert`) with the cleaned HTML.
+    *   Receives a public PDF URL from the external API.
+    *   Returns the `public_url` via Server-Sent Events (SSE).
+10. **User Registration & Guest Data Association:**
+    *   User signs up via `/signup`. Frontend sends `guestId` (if present in `localStorage`) along with registration details to `/api/auth/register`.
+    *   Backend creates the `User`. If `guestId` was provided, it finds all `Project` and `Diagram` documents matching the `guestOwnerId`/`guestUploaderId`.
+    *   Updates matching documents to set the `owner`/`uploadedBy` to the new user's ID and removes the `guestOwnerId`/`guestUploaderId`.
+    *   Frontend clears `guestId` from `localStorage` on successful registration.
+11. **Version Comparison:** (Assumed requires login) The backend compares metadata/visuals of two diagram versions.
+12. **Knowledge Hub:** (Assumed requires login) Leverages MongoDB search to query historical project data.
 
-## Application Structure (Pages)
+## Application Structure (Layout & Pages)
 
-1.  **Login / Signup:** Authentication forms.
-2.  **Dashboard:** Project listing, upload initiation, status tracking.
-3.  **Upload Page:** File upload interface.
-4.  **Diagram Viewer:** Displays diagrams, OCR overlays, version history access.
-5.  **Chat with Diagram:** Gemini-powered chat interface with diagram context.
-6.  **BoM & BoQ Page:** Tabular display of extracted materials/quantities, editing, export.
-7.  **Compliance Checker:** Displays compliance results against selected standards.
-8.  **Version Comparison:** Side-by-side view of diagram differences.
-9.  **Knowledge Hub:** Search interface for historical data.
-10. **Admin & Settings:** User/role management, API configurations.
+-   **Layout (`src/app/layout.js`):** Wraps all pages. Includes `<AuthProvider>`, `<Header>`, and `<Sidebar>`. Contains a main wrapper `div` (`flex-grow flex flex-col w-full`) holding the `Header` and the main content area (`<main>`). The `<main>` element uses `flex-grow overflow-y-auto`.
+-   **Header Component (`src/components/Header.js`):** Client component. Renders conditionally based on route and auth status. Shows full nav for unauthenticated users, simplified nav + Dashboard link for authenticated users on public routes, and minimal nav (Logo, User/Logout) for authenticated users on private routes. Fetches first project ID for Dashboard link.
+-   **Sidebar Component (`src/components/Sidebar.js`):** Client component. Renders project list and navigation *only* if user is authenticated AND not on a public/auth route.
+-   **Public Pages:**
+    1.  **`/` (Landing Page):** Main marketing page, includes Hero section with guest upload, Features, Workflow, Use Cases, FAQ. Relies on Layout for Header.
+    2.  **`/solutions`:** Details on solutions offered (Placeholder). Relies on Layout for Header.
+    3.  **`/how-it-works`:** Detailed explanation of the platform workflow. Relies on Layout for Header.
+    4.  **`/use-cases`:** Examples for different engineering disciplines. Relies on Layout for Header.
+    5.  **`/resources`:** Links to blog, docs, case studies. Relies on Layout for Header.
+-   **Auth Pages:**
+    6.  **`/login` / `/signup`:** Authentication forms. Header is not rendered on these pages.
+-   **Private Pages (Require Auth or Guest Auth):**
+    7.  **`/project/[projectId]` (Dashboard):** Main project workspace. Displays diagrams, chat interface, report generation options. Handles both authenticated and guest access (via `X-Guest-ID` header and `localStorage`). Shows guest banner if applicable. Relies on Layout for Header (simplified view) and Sidebar.
+    8.  **`/project/[projectId]/upload`:** Authenticated file upload interface. Relies on Layout for Header (simplified view) and Sidebar.
+-   **(Future/TBD):** Diagram Viewer, BoM Page, Compliance Page, Version Comparison Page, Knowledge Hub Interface, Admin/Settings.
 
 ## Design Considerations
 
@@ -75,8 +100,9 @@ graph TD
 -   **Modularity:** Features like OCR, Chat, BoM generation, and Compliance are distinct modules interacting via the backend API layer.
 -   **Data Structure:** A well-defined MongoDB schema is crucial for linking diagrams, parsed data, user context, and project information effectively.
 -   **Error Handling:** Robust error handling is needed for external API calls (Vision, Gemini), file processing, GCS operations, stream handling, and PDF generation.
--   **Security:** Authentication and authorization (role-based access) are critical, especially for admin functions and project data access.
--   **Serverless File Handling:** API routes requiring file content (reports, chat) must download files directly from GCS during execution due to the ephemeral nature of the `/tmp` directory in Vercel's serverless environment. Relying on a separate sync process to populate `/tmp` is unreliable.
--   **Environment-Specific Configuration:** PDF generation using Puppeteer requires different configurations (executable path, launch arguments) for local development versus serverless deployment (Vercel) to ensure stability and compatibility. Conditional logic based on `process.env.VERCEL` is used.
+-   **Security:** Authentication (NextAuth) and authorization (role-based access for logged-in users, guest ID validation for temporary access) are critical.
+-   **Guest Authorization:** Uses a combination of `localStorage` on the client and a custom `X-Guest-ID` HTTP header checked by backend APIs against `guestOwnerId` in the `Project` model for temporary, project-specific access. Guest data is associated with a user account upon registration.
+-   **Serverless File Handling:** API routes requiring file content (chat) must download files directly from GCS during execution. Report generation relies on Gemini analysis and an external PDF conversion API.
+-   **External PDF API:** PDF generation for reports (BoM, Compliance, OCR/PDR) is handled by calling the `https://html-text-to-pdf.shothik.ai/convert` API with the generated HTML. This removes the need for Puppeteer/Chromium dependencies and GCS uploads for temporary PDFs within the application.
 -   **API Response Cleaning:** Responses from external APIs (like Gemini) may require cleaning/parsing to remove extraneous formatting (e.g., Markdown code fences) before further processing or display.
 -   **Local Development:** A `docker-compose.yml` file is used to orchestrate the local development environment, building the `development` stage from the `Dockerfile` and mounting local source code.

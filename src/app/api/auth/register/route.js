@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import User from '@/models/User';
+import Project from '@/models/Project'; // Import Project model
+import Diagram from '@/models/Diagram'; // Import Diagram model
 import { NextResponse } from 'next/server';
 import * as constants from '@/constants';
 
@@ -23,7 +25,8 @@ export async function POST(request) {
   try {
     await connectMongoDB();
 
-    const { name, email, password } = await request.json();
+    // Extract guestId along with other fields
+    const { name, email, password, guestId } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json({ message: 'Email and password are required' }, { status: 400 });
@@ -46,8 +49,35 @@ export async function POST(request) {
     });
 
     await newUser.save();
+    const newUserId = newUser._id; // Get the new user's ID
 
-    console.log(`New user registered: ${email}`);
+    console.log(`New user registered: ${email} with ID: ${newUserId}`);
+
+    // --- Associate Guest Data ---
+    if (guestId) {
+      console.log(`Associating data for guestId: ${guestId} with userId: ${newUserId}`);
+      try {
+        // Update Projects
+        const projectUpdateResult = await Project.updateMany(
+          { guestOwnerId: guestId },
+          { $set: { owner: newUserId }, $unset: { guestOwnerId: "" } }
+        );
+        console.log(`Projects updated for guestId ${guestId}:`, projectUpdateResult);
+
+        // Update Diagrams
+        const diagramUpdateResult = await Diagram.updateMany(
+          { guestUploaderId: guestId },
+          { $set: { uploadedBy: newUserId }, $unset: { guestUploaderId: "" } }
+        );
+        console.log(`Diagrams updated for guestId ${guestId}:`, diagramUpdateResult);
+
+      } catch (assocError) {
+        console.error(`Error associating guest data for guestId ${guestId} with userId ${newUserId}:`, assocError);
+        // Log the error but don't fail the registration
+      }
+    }
+    // --- End Associate Guest Data ---
+
 
     // Sign in the user after successful registration
     // const result = await signIn('credentials', {

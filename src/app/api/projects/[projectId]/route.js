@@ -15,25 +15,45 @@ export async function GET(request, context) { // Use context argument
   }
 
   try {
+    // Check for session OR guest header
     const session = await getServerSession(authOptions);
-    if (!session || !session.user || !session.user.id) {
+    const guestIdHeader = request.headers.get('X-Guest-ID');
+    let userId = null;
+    let isGuest = false;
+
+    if (session && session.user && session.user.id) {
+      userId = session.user.id;
+    } else if (guestIdHeader) {
+      isGuest = true;
+      console.log(`Project GET API: Guest access attempt with ID: ${guestIdHeader}`);
+    } else {
+      // No session and no guest header
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
-    const userId = session.user.id;
 
     await connectMongoDB();
 
-    // Fetch the project and verify ownership
+    // Fetch the project
     const project = await Project.findById(projectId);
 
     if (!project) {
       return NextResponse.json({ message: 'Project not found' }, { status: 404 });
     }
 
-    // Ensure the logged-in user owns the project
-    if (project.owner.toString() !== userId) {
-        console.log(`User ${userId} attempted to access project ${projectId} owned by ${project.owner.toString()}`);
-        return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+    // Authorization check
+    if (userId) { // Authenticated user
+        if (!project.owner || project.owner.toString() !== userId) {
+             console.log(`User ${userId} attempted to access project ${projectId} owned by ${project.owner?.toString()}`);
+             return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+        }
+    } else if (isGuest) { // Guest user
+        if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
+             console.log(`Project GET API: Guest ID mismatch: Header=${guestIdHeader}, Project=${project.guestOwnerId}`);
+             return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
+        }
+    } else {
+        // Should not happen due to initial check, but safeguard
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     // Fetch diagrams associated with the project

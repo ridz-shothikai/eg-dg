@@ -142,21 +142,47 @@ export async function GET(request, context) { // Keep context for potential futu
   const tempProjectDir = path.join(os.tmpdir(), `doclyze_project_${projectId}`);
   let projectData = null;
   let diagramsData = [];
-  let updatedDiagrams = []; // To track diagrams needing DB update
+  let updatedDiagrams = [];
 
   try {
+    // Check for session OR guest header
     const session = await getServerSession(authOptions);
-    if (!session || !session.user || !session.user.id) {
+    const guestIdHeader = request.headers.get('X-Guest-ID');
+    let userId = null;
+    let isGuest = false;
+
+    if (session && session.user && session.user.id) {
+      userId = session.user.id;
+    } else if (guestIdHeader) {
+      isGuest = true;
+      console.log(`Prepare API: Guest access attempt with ID: ${guestIdHeader}`);
+    } else {
+      // No session and no guest header
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
-    const userId = session.user.id;
 
     await connectMongoDB();
 
-    // 1. Fetch Project and verify ownership
+    // 1. Fetch Project and verify ownership OR guest access
     projectData = await Project.findById(projectId).populate('diagrams'); // Populate diagrams
-    if (!projectData || projectData.owner.toString() !== userId) {
-      return NextResponse.json({ message: 'Project not found or forbidden' }, { status: 404 });
+
+    if (!projectData) {
+        return NextResponse.json({ message: 'Project not found' }, { status: 404 });
+    }
+
+    // Authorization check
+    if (userId) { // Authenticated user
+        if (!projectData.owner || projectData.owner.toString() !== userId) {
+            return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+        }
+    } else if (isGuest) { // Guest user
+        if (!projectData.guestOwnerId || projectData.guestOwnerId !== guestIdHeader) {
+             console.log(`Guest ID mismatch: Header=${guestIdHeader}, Project=${projectData.guestOwnerId}`);
+             return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
+        }
+    } else {
+        // Should not happen due to initial check, but safeguard
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     diagramsData = projectData.diagrams || [];

@@ -29,7 +29,8 @@ export default function LoginPage() {
   // Only render login form if not authenticated
   if (status === 'unauthenticated') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+      // Added flex-grow to make this div fill the space within the main layout's flex container
+      <div className="min-h-screen flex flex-grow items-center justify-center bg-gray-900 text-white">
         <Suspense fallback={<LoadingSpinner text="Loading Login..." />}>
           <LoginForm />
         </Suspense>

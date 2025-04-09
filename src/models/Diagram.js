@@ -34,7 +34,13 @@ const DiagramSchema = new mongoose.Schema({
   uploadedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false, // Make optional for guest uploads
+  },
+  // Temporary identifier for guest-uploaded diagrams
+  guestUploaderId: {
+    type: String,
+    index: true, // Index for efficient lookup during registration
+    sparse: true, // Index only documents that have this field
   },
   // Status of processing (e.g., Uploaded, OCR Pending, OCR Complete, Analysis Complete, Failed)
   processingStatus: {

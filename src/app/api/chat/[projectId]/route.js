@@ -73,17 +73,45 @@ export async function POST(request, context) {
   }
 
   try {
+    // Check for session OR guest header
     const session = await getServerSession(authOptions);
-    if (!session || !session.user || !session.user.id) {
+    const guestIdHeader = request.headers.get('X-Guest-ID');
+    let userId = null;
+    let isGuest = false;
+
+    if (session && session.user && session.user.id) {
+      userId = session.user.id;
+    } else if (guestIdHeader) {
+      isGuest = true;
+      console.log(`Chat API: Guest access attempt with ID: ${guestIdHeader}`);
+    } else {
+      // No session and no guest header
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
-    const userId = session.user.id;
+
 
     await connectMongoDB();
 
+    // Fetch Project and verify ownership OR guest access
     const project = await Project.findById(projectId);
-    if (!project || project.owner.toString() !== userId) {
-      return NextResponse.json({ message: 'Project not found or forbidden' }, { status: 404 });
+
+    if (!project) {
+        return NextResponse.json({ message: 'Project not found' }, { status: 404 });
+    }
+
+    // Authorization check
+    if (userId) { // Authenticated user
+        if (!project.owner || project.owner.toString() !== userId) {
+            return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+        }
+    } else if (isGuest) { // Guest user
+        if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
+             console.log(`Chat API: Guest ID mismatch: Header=${guestIdHeader}, Project=${project.guestOwnerId}`);
+             return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
+        }
+    } else {
+        // Should not happen due to initial check, but safeguard
+        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     // Fetch diagrams using storagePath

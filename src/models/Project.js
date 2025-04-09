@@ -14,7 +14,13 @@ const ProjectSchema = new mongoose.Schema({
   owner: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false, // Make owner optional to allow null for guest projects
+  },
+  // Temporary identifier for guest-created projects
+  guestOwnerId: {
+    type: String,
+    index: true, // Index for efficient lookup during registration
+    sparse: true, // Index only documents that have this field
   },
   // Status could be used for tracking project lifecycle (e.g., 'Active', 'Archived')
   status: {

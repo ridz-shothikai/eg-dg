@@ -30,9 +30,12 @@ if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
 }
 
 // POST handler for syncing files to local temp cache
-export async function POST(request, { params }) { // Revert to standard { params } destructuring
-  await request.text(); // Try consuming the request body to ensure context is resolved
-  const { projectId } = params; // Revert to direct destructuring
+export async function POST(request, { params }) {
+  // Await params before accessing properties
+  const awaitedParams = await params;
+  const { projectId } = awaitedParams;
+  // Consume body *after* accessing params if needed, though likely not necessary for sync
+  // await request.text();
 
   if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
     return NextResponse.json({ message: 'Invalid Project ID' }, { status: 400 });
@@ -42,18 +45,45 @@ export async function POST(request, { params }) { // Revert to standard { params
   }
 
   try {
+    // Check for session OR guest header
     const session = await getServerSession(authOptions);
-    if (!session || !session.user || !session.user.id) {
+    const guestIdHeader = request.headers.get('X-Guest-ID');
+    let userId = null;
+    let isGuest = false;
+
+    if (session && session.user && session.user.id) {
+      userId = session.user.id;
+    } else if (guestIdHeader) {
+      isGuest = true;
+      console.log(`Sync Files API: Guest access attempt with ID: ${guestIdHeader}`);
+    } else {
+      // No session and no guest header
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
-    const userId = session.user.id;
 
     await connectMongoDB();
 
+    // Fetch Project and verify ownership OR guest access
     const project = await Project.findById(projectId);
-    if (!project || project.owner.toString() !== userId) {
-      return NextResponse.json({ message: 'Project not found or forbidden' }, { status: 404 });
+
+    if (!project) {
+        return NextResponse.json({ message: 'Project not found' }, { status: 404 });
     }
+
+    // Authorization check
+    if (userId) { // Authenticated user
+        if (!project.owner || project.owner.toString() !== userId) {
+             return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+        }
+    } else if (isGuest) { // Guest user
+        if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
+             console.log(`Sync Files API: Guest ID mismatch: Header=${guestIdHeader}, Project=${project.guestOwnerId}`);
+             return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
+        }
+    } else {
+         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 }); // Should not happen
+    }
+    // Authorization passed
 
     // Fetch diagrams ensuring storagePath exists
     const diagrams = await Diagram.find({

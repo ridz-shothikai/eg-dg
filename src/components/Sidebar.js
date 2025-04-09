@@ -2,12 +2,18 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useSession, signOut } from 'next-auth/react'; // Import signOut
-import { useRouter } from 'next/navigation';
-import NewProjectModal from './NewProjectModal'; // Import the modal
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter, usePathname } from 'next/navigation'; // Import usePathname
+import NewProjectModal from './NewProjectModal';
+
+// List of public routes where the sidebar should NOT be shown
+const publicRoutes = ['/', '/solutions', '/how-it-works', '/use-cases', '/resources'];
+// Auth routes are also public in terms of layout
+const authRoutes = ['/login', '/signup'];
 
 export default function Sidebar() {
   const { data: session, status } = useSession();
+  const pathname = usePathname(); // Get current path
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -36,7 +42,7 @@ export default function Sidebar() {
       setLoading(false);
       setProjects([]);
     }
-  }, [status]); // Dependency array includes status
+  }, [status]);
 
   useEffect(() => {
     fetchProjects();
@@ -72,9 +78,21 @@ export default function Sidebar() {
 
   // Only render sidebar content if authenticated
   if (status !== 'authenticated') {
-    return null; // Render nothing if not authenticated or loading
+    return null; // Render nothing if not authenticated
   }
 
+  // Define isAuthenticated based on session status
+  const isAuthenticated = status === 'authenticated';
+
+  // Check if the current route is public or an auth route
+  const isPublicOrAuthRoute = publicRoutes.includes(pathname) || authRoutes.includes(pathname);
+
+  // Render nothing if authenticated but on a public/auth route
+  if (isAuthenticated && isPublicOrAuthRoute) {
+    return null;
+  }
+
+  // Render sidebar only if authenticated AND on a private route
   return (
     <React.Fragment>
       <div className="w-64 h-screen bg-[#100926] text-white p-4 flex flex-col border-r border-[#130830]">

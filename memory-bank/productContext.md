@@ -12,7 +12,8 @@ The platform allows users to upload various diagram formats (PDF, images, CAD). 
 
 ## Key Features & User Experience
 
--   **Upload Engine:** Simple drag-and-drop interface for uploading diagrams.
+-   **Guest Upload & Project Creation:** Users can upload their first diagram from the landing page without signing up. A temporary guest project is automatically created, and the user is directed to the project dashboard. Guest data is associated with their account upon registration.
+-   **Upload Engine:** Simple drag-and-drop interface for uploading diagrams (available on landing page for guests and within projects for logged-in users).
 -   **Smart Diagram Parsing:** Automatically identifies and labels components (beams, slabs, etc.) and extracts metadata.
 -   **Natural Language Chat:** Users can ask questions in plain English about the diagram content (e.g., "What is the bridge ID?", "List all PSC beams"). Provides context-aware answers, streamed in real-time, or indicates if information is not present. Includes an animated zooming dot loading indicator while generating responses. A copy button is provided below each AI response to easily copy the text.
 -   **BoM/BoQ Extraction:** Automatically generates Bills of Materials and Quantities with details like item type, quantity, dimensions, and material. Allows manual edits and export (CSV, PDF, JSON).

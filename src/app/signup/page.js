@@ -35,10 +35,18 @@ export default function SignupPage() {
     }
 
     try {
+      // Read guestId from localStorage
+      const guestId = localStorage.getItem('guestId');
+      const requestBody = { name, email, password };
+      if (guestId) {
+        requestBody.guestId = guestId;
+        console.log('Sending guestId with registration:', guestId);
+      }
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify(requestBody), // Send body with potential guestId
       });
 
       setIsLoading(false);
@@ -47,6 +55,11 @@ export default function SignupPage() {
         const data = await response.json();
         setError(data.message || 'Registration failed. Please try again.');
       } else {
+        // Clear guestId from localStorage on successful registration
+        if (guestId) {
+          localStorage.removeItem('guestId');
+          console.log('Cleared guestId from localStorage.');
+        }
         // Redirect to login page with success message after successful registration
         router.push('/login?signup=success');
       }
@@ -69,9 +82,11 @@ export default function SignupPage() {
   // Only render signup form if not authenticated
   if (status === 'unauthenticated') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+      // Added flex-grow to make this div fill the space within the main layout's flex container
+      <div className="min-h-screen flex flex-grow items-center justify-center bg-gray-900 text-white">
         <div className="bg-[#100926] p-8 rounded-lg shadow-lg w-full max-w-md border border-[#130830]">
-          <h1 className="text-2xl font-bold mb-6 text-center">Sign Up for Doclyze</h1>
+          {/* Update Title */}
+          <h1 className="text-2xl font-bold mb-6 text-center">Sign Up for Engineering Diagram Insights</h1>
           <form onSubmit={handleSubmit}>
             {error && <p className="mb-4 text-center text-red-500">{error}</p>}
             <div className="mb-4">

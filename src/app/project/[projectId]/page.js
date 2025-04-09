@@ -27,9 +27,11 @@ export default function ProjectDetailPage() {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatError, setChatError] = useState('');
-  const [copiedIndex, setCopiedIndex] = useState(null); // State to track copied message index
-  const [initialSummary, setInitialSummary] = useState(null); // State for initial summary
-  const [suggestedQuestions, setSuggestedQuestions] = useState([]); // State for suggestions
+  const [copiedIndex, setCopiedIndex] = useState(null);
+  const [initialSummary, setInitialSummary] = useState(null);
+  const [suggestedQuestions, setSuggestedQuestions] = useState([]);
+  const [guestId, setGuestId] = useState(null); // State for guest ID
+  const [isGuestMode, setIsGuestMode] = useState(false); // State to track guest mode
 
   // Refactored Report States
   const [reportStates, setReportStates] = useState({
@@ -87,10 +89,11 @@ export default function ProjectDetailPage() {
   const handleSseComplete = (event, reportType) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.downloadUrl) {
+        // --- UPDATED: Check for public_url ---
+        if (data.public_url) {
           updateReportState(reportType, { message: 'Report ready! Opening...' });
-          window.open(data.downloadUrl, '_blank');
-        } else { throw new Error("Download URL missing."); }
+          window.open(data.public_url, '_blank'); // Use public_url
+        } else { throw new Error("Public URL missing in complete event."); } // Updated error message
         finishReport(reportType, true);
       } catch (e) {
          console.error(`Failed to handle SSE complete event for ${reportType}:`, e);
@@ -119,16 +122,65 @@ export default function ProjectDetailPage() {
   // --- End Helper Functions ---
 
 
-  // Effect for fetching project data and triggering sync
+  // Effect to check for guestId if unauthenticated
   useEffect(() => {
-    // ... (fetchData logic remains the same)
-    if (status === 'loading') return;
-    if (status === 'unauthenticated') { router.push('/login'); return; }
+    if (status === 'unauthenticated') {
+      const storedGuestId = localStorage.getItem('guestId');
+      if (storedGuestId) {
+        console.log('Guest ID found in localStorage:', storedGuestId);
+        setGuestId(storedGuestId);
+        setIsGuestMode(true); // Indicate guest mode
+      } else {
+        // No session and no guest ID, redirect to login
+        console.log('Unauthenticated and no guest ID found, redirecting to login.');
+        router.push('/login');
+      }
+    } else if (status === 'authenticated') {
+      setIsGuestMode(false); // Ensure guest mode is off if authenticated
+    }
+  }, [status, router]);
+
+
+  // Effect for fetching project data and triggering sync (updated for guest mode)
+  useEffect(() => {
+    if (status === 'loading') return; // Wait until session status is determined
+
+    // Determine if we should fetch (either authenticated or guest mode with guestId)
+    const shouldFetch = status === 'authenticated' || (status === 'unauthenticated' && guestId);
+
+    if (!shouldFetch) {
+        // If unauthenticated and guestId hasn't been set yet by the other effect, wait.
+        // If guestId check failed in the other effect, redirection already happened.
+        return;
+    }
+
     async function fetchData() {
       if (!projectId) return;
       try {
         setLoading(true); setError(null); setPreparationStatus('loading');
-        const response = await fetch(`/api/projects/${projectId}/prepare`);
+
+        // Prepare headers: Add guest ID header if in guest mode
+        const headers = {};
+        if (isGuestMode && guestId) {
+          headers['X-Guest-ID'] = guestId;
+        }
+        // Note: next-auth session cookie is sent automatically by the browser
+
+        const response = await fetch(`/api/projects/${projectId}/prepare`, { headers });
+
+        if (response.status === 401 || response.status === 403) {
+            // Handle unauthorized/forbidden, potentially redirect guest to login
+            setError("Access denied. Please log in or ensure you have access.");
+            setPreparationStatus('failed');
+            if (isGuestMode) {
+                // Maybe clear guestId if it's invalid for this project? Or just redirect.
+                router.push('/login?error=guest_access_denied');
+            } else {
+                 router.push('/login?error=auth_required');
+            }
+            return; // Stop further processing
+        }
+
         if (!response.ok) { const d = await response.json().catch(()=>({})); throw new Error(d.message || `Failed: ${response.status}`); }
         const data = await response.json();
         setProject(data.project);
@@ -144,11 +196,19 @@ export default function ProjectDetailPage() {
             .then(async (res) => { const d=await res.json().catch(()=>({})); if(res.ok) console.log(`Sync: ${d.synced} synced, ${d.skipped} skipped, ${d.errors} errors`); else console.error(`Sync failed: ${d.message||res.statusText}`); })
             .catch(err => console.error("Sync trigger error:", err));
         }
-      } catch (err) { console.error('Prep error:', err); setPreparationStatus('failed'); setError(err.message); }
-      finally { setLoading(false); }
+      } catch (err) {
+          console.error('Prep error:', err);
+          setPreparationStatus('failed');
+          setError(err.message || "Failed to load project data.");
+      } finally {
+          setLoading(false);
+      }
     }
-    if (status === 'authenticated') fetchData();
-  }, [projectId, status, router]);
+
+    fetchData();
+    // Depend on guestId as well, so fetch runs when guestId is set
+  }, [projectId, status, router, guestId, isGuestMode]);
+
 
   // Effect for auto-scrolling chat
   useEffect(() => {
@@ -163,7 +223,11 @@ export default function ProjectDetailPage() {
   // --- Report Download Handlers ---
   const handleOcrDownload = () => {
     if (!startReport('ocr')) return;
-    const eventSource = new EventSource(`/api/projects/${projectId}/reports/ocr`);
+    // Append guestId if in guest mode
+    const url = isGuestMode && guestId
+      ? `/api/projects/${projectId}/reports/ocr?guestId=${guestId}`
+      : `/api/projects/${projectId}/reports/ocr`;
+    const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
     eventSource.onmessage = (e) => handleSseMessage(e, 'ocr');
     eventSource.addEventListener('complete', (e) => handleSseComplete(e, 'ocr'));
@@ -173,7 +237,11 @@ export default function ProjectDetailPage() {
 
   const handleBomDownload = () => {
     if (!startReport('bom')) return;
-    const eventSource = new EventSource(`/api/projects/${projectId}/reports/bom`);
+    // Append guestId if in guest mode
+    const url = isGuestMode && guestId
+      ? `/api/projects/${projectId}/reports/bom?guestId=${guestId}`
+      : `/api/projects/${projectId}/reports/bom`;
+    const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
     eventSource.onmessage = (e) => handleSseMessage(e, 'bom');
     eventSource.addEventListener('complete', (e) => handleSseComplete(e, 'bom'));
@@ -183,7 +251,11 @@ export default function ProjectDetailPage() {
 
   const handleComplianceDownload = () => {
       if (!startReport('compliance')) return;
-      const eventSource = new EventSource(`/api/projects/${projectId}/reports/compliance`); // Point to compliance route
+      // Append guestId if in guest mode
+      const url = isGuestMode && guestId
+        ? `/api/projects/${projectId}/reports/compliance?guestId=${guestId}`
+        : `/api/projects/${projectId}/reports/compliance`;
+      const eventSource = new EventSource(url); // Point to compliance route with potential query param
       eventSourceRef.current = eventSource;
       eventSource.onmessage = (e) => handleSseMessage(e, 'compliance');
       eventSource.addEventListener('complete', (e) => handleSseComplete(e, 'compliance'));
@@ -207,12 +279,22 @@ export default function ProjectDetailPage() {
     setChatError('');
 
     try {
+      // Prepare headers: Add guest ID header if in guest mode
+      const headers = { 'Content-Type': 'application/json' };
+      if (isGuestMode && guestId) {
+        headers['X-Guest-ID'] = guestId;
+      }
+
       const response = await fetch(`/api/chat/${projectId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         // Send previous history excluding the placeholder we just added
         body: JSON.stringify({ message: currentInput, history: chatHistory.slice(-6) })
       });
+
+       if (response.status === 401 || response.status === 403) {
+           throw new Error("Access denied. Please log in."); // Simplified error for chat
+       }
 
       if (!response.ok) {
         // Try to get error message from JSON, fallback to status text
@@ -293,14 +375,37 @@ export default function ProjectDetailPage() {
   // --- End Handler ---
 
   // --- Render Logic ---
-  if (loading || status === 'loading') return <div className="flex-grow flex items-center justify-center bg-gray-900"><LoadingSpinner text="Loading project..." /></div>; // Restored text prop
-  if (error && preparationStatus === 'failed') return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Error: {error}</div>;
-  if (!project) return <div className="flex-grow flex items-center justify-center bg-gray-900 text-white">Project data unavailable.</div>;
+  // Show specific loading state while guestId is being checked
+  if (status === 'unauthenticated' && !guestId && !error) {
+     // Removed flex-grow, main layout handles expansion. Added w-full h-full for centering within main.
+     return <div className="w-full h-full flex items-center justify-center bg-gray-900"><LoadingSpinner text="Checking guest access..." size="md" /></div>;
+  }
+
+  // Removed flex-grow, main layout handles expansion. Added w-full h-full for centering within main.
+  if (loading || status === 'loading') return <div className="w-full h-full flex items-center justify-center bg-gray-900"><LoadingSpinner text="Loading project..." size="md" /></div>;
+  // Removed flex-grow, main layout handles expansion. Added w-full h-full for centering within main.
+  if (error) return <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white p-4 text-center">Error: {error}</div>;
+  // Removed flex-grow, main layout handles expansion. Added w-full h-full for centering within main.
+  if (!project) return <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white">Project data unavailable.</div>;
+
 
   return (
-    <div className="flex flex-col md:flex-row h-full">
+    // Removed h-full, layout.js handles height expansion via flex-grow on main
+    <div className="flex flex-col md:flex-row relative flex-grow"> {/* Added flex-grow here to ensure it fills the main container */}
+       {/* Guest Mode Banner */}
+       {isGuestMode && (
+        <div className="absolute top-0 left-0 right-0 bg-yellow-600 text-black text-center p-2 text-sm z-10">
+          You are viewing this project as a guest. &nbsp;
+          <Link href="/signup" className="font-bold underline hover:text-yellow-900">Sign up</Link>
+          &nbsp; or &nbsp;
+          <Link href="/login" className="font-bold underline hover:text-yellow-900">Log in</Link>
+          &nbsp; to save your work permanently.
+        </div>
+      )}
+
       {/* Left Column */}
-      <div className="w-full md:w-1/3 lg:w-1/4 p-4 border-r border-gray-700 flex flex-col space-y-6 overflow-y-auto">
+      {/* Added pt-10 if guest mode to avoid banner overlap */}
+      <div className={`w-full md:w-1/3 lg:w-1/4 p-4 border-r border-gray-700 flex flex-col space-y-6 overflow-y-auto ${isGuestMode ? 'pt-12' : ''}`}>
         {/* Project Files Section */}
         <div>
           <h2 className="text-xl font-semibold mb-3 text-white">Project Files</h2>
@@ -380,10 +485,12 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Right Column: Chat Interface */}
-      <div className="w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col overflow-hidden">
-        <h2 className="text-2xl font-semibold mb-4 text-white">Chat for Insights</h2>
-        {/* Main chat container - always rendered */}
-        <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col overflow-y-auto overflow-x-hidden relative"> {/* Added relative positioning */}
+       {/* Added pt-10 if guest mode to avoid banner overlap */}
+       {/* Ensure this outer div allows the inner content to flex and fill height */}
+      <div className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col ${isGuestMode ? 'pt-12' : ''}`}>
+        <h2 className="text-2xl font-semibold mb-4 text-white flex-shrink-0">Chat for Insights</h2> {/* Prevent title from shrinking */}
+        {/* Main chat container - takes remaining space, flex column */}
+        <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col relative"> {/* Removed overflow-hidden */}
 
           {/* Loading Spinner Overlay */}
           {(preparationStatus === 'loading' || preparationStatus === 'processing') && (
@@ -395,8 +502,8 @@ export default function ProjectDetailPage() {
           {/* Chat Content (History and Input) - Rendered only when ready */}
           {preparationStatus === 'ready' && (
             <React.Fragment>
-              {/* Inner container for chat history */}
-              <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4">
+              {/* Inner container for chat history - THIS part scrolls */}
+              <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4"> {/* Kept flex-grow and overflow-y-auto */}
                 {/* Display Initial Summary if available and history is empty */}
                 {initialSummary && chatHistory.length === 0 && (
                   <div className="flex flex-col items-start"> {/* Model message style */}
@@ -456,8 +563,8 @@ export default function ProjectDetailPage() {
                  {/* Chat Error Message */}
                  {chatError && <p className="text-red-500 text-sm mt-2 self-start">{chatError}</p>}
               </div>
-              {/* Input area */}
-              <div className="mt-auto flex pt-4 border-t border-gray-700">
+              {/* Input area - Fixed at the bottom */}
+              <div className="flex-shrink-0 flex pt-4 border-t border-gray-700"> {/* Added flex-shrink-0 */}
                 <textarea
                   className="flex-grow p-2 bg-gray-700 rounded-l border border-gray-600 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-70 resize-none"
                   placeholder="Ask questions about the diagrams..."

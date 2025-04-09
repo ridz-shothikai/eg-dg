@@ -8,18 +8,16 @@ import mongoose from 'mongoose';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import mime from 'mime-types';
 // Removed pdf-lib imports
-// import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Storage } from '@google-cloud/storage';
-// Removed fs/promises import as it's not used directly here anymore
-// import fs from 'fs/promises';
+// Removed fs/promises import
 import path from 'path';
 import * as constants from '@/constants';
-import puppeteerFull from 'puppeteer'; // For local development
-import chromium from '@sparticuz/chromium'; // For Vercel/serverless
-import puppeteer from 'puppeteer-core'; // Core API used by both
+// Removed Puppeteer imports
 
 
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
+// Define the new API endpoint
+const HTML_TO_PDF_API_URL = 'https://html-text-to-pdf.shothik.ai/convert';
 
 // --- Initialize Gemini Model ---
 let gemini = null;
@@ -105,109 +103,20 @@ async function callGemini(prompt, fileParts = [], applySafetySettings = false) {
     }
 }
 
-// --- NEW: Helper function to create PDF from HTML using Puppeteer ---
-async function createPdfFromHtml(htmlContent) {
-    let browser = null;
-    console.log("Generating PDF from HTML using Puppeteer...");
-    try { // Start main try block HERE, encompassing everything
-        // --- Determine executablePath and args ---
-        // Use environment variable set in Dockerfile if available, otherwise use local puppeteer
-        const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteerFull.executablePath();
-        // Use minimal args for both local and production (safer default)
-        const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
-
-        console.log(`Using Chromium executable path: ${executablePath}`);
-        console.log(`Using launch args: ${JSON.stringify(launchArgs)}`);
-        // --- End determination ---
-
-        if (!executablePath) {
-             throw new Error("Chromium executable path could not be determined.");
-            }
-
-            console.log("Launching browser...");
-            const launchOptions = {
-                args: launchArgs,
-                // defaultViewport: chromium.defaultViewport, // Use Puppeteer's default
-                executablePath: executablePath,
-                headless: true, // Default to headless true
-                ignoreHTTPSErrors: true,
-            };
-
-            browser = await puppeteer.launch(launchOptions); // browser is declared outside try
-            console.log("Browser launched.");
-
-            const page = await browser.newPage();
-            console.log("New page created.");
-
-            // Add basic styling for better PDF output
-            const styledHtml = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; padding: 20px; color: #333; }
-                        h1, h2, h3 { margin-bottom: 0.5em; margin-top: 1.5em; color: #110927; }
-                        h1 { font-size: 24px; text-align: center; border-bottom: 2px solid #130830; padding-bottom: 10px; margin-bottom: 25px; }
-                        h2 { font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 15px; }
-                        h3 { font-size: 16px; }
-                        p { margin-bottom: 1em; }
-                        ul, ol { margin-left: 20px; margin-bottom: 1em; }
-                        li { margin-bottom: 0.5em; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 1em; margin-bottom: 1em; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-                        th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; vertical-align: top; }
-                        th { background-color: #f8f8f8; font-weight: bold; color: #100926; }
-                        tbody tr:nth-child(even) { background-color: #fdfdfd; }
-                        pre { background-color: #f5f5f5; padding: 10px; border: 1px solid #eee; border-radius: 4px; overflow-x: auto; font-family: 'Courier New', Courier, monospace; }
-                    </style>
-                </head>
-                <body>
-                    ${htmlContent}
-                </body>
-                </html>
-            `;
-
-            console.log("Setting page content...");
-            await page.setContent(styledHtml, { waitUntil: 'networkidle0' });
-            console.log("Page content set.");
-
-            console.log("Generating PDF bytes...");
-            const pdfOptions = {
-                format: 'A4',
-                printBackground: true,
-                margin: { top: '1in', right: '1in', bottom: '1in', left: '1in' },
-                preferCSSPageSize: true
-            };
-            const pdfBytes = await page.pdf(pdfOptions);
-            console.log("PDF bytes generated.");
-
-            return pdfBytes; // Return from within the main try block
-    } catch (error) {
-        console.error("Error generating PDF from HTML:", error);
-        throw new Error(`Failed to generate PDF using Puppeteer: ${error.message}`);
-    } finally {
-        if (browser !== null) {
-            console.log("Closing browser...");
-            await browser.close();
-            console.log("Browser closed.");
-        }
-    }
-} // <-- Add missing closing brace for createPdfFromHtml function
-
-// --- END NEW ---
+// --- REMOVED createPdfFromHtml function ---
 
 // Function to send SSE messages
-function sendSseMessage(controller, data, eventName = 'message') { // Renamed parameter
+function sendSseMessage(controller, data, eventName = 'message') {
   const encoder = new TextEncoder();
-  if (eventName !== 'message') { // Updated usage
-    controller.enqueue(encoder.encode(`event: ${eventName}\n`)); // Updated usage
+  if (eventName !== 'message') {
+    controller.enqueue(encoder.encode(`event: ${eventName}\n`));
   }
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 }
 
 // GET handler for SSE connection (BoM Report)
-export async function GET(request, { params }) { // Use standard { params } destructuring
-  const { projectId } = params; // Use direct destructuring
+export async function GET(request, { params }) {
+  const { projectId } = params;
 
   if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
     return new Response("Invalid Project ID", { status: 400 });
@@ -218,24 +127,66 @@ export async function GET(request, { params }) { // Use standard { params } dest
    if (!storage || !GCS_BUCKET_NAME) {
      return new Response("Backend not ready (GCS config missing)", { status: 503 });
   }
-  // --- NEW: Check if Puppeteer dependencies are available ---
-  if (typeof chromium === 'undefined' || typeof puppeteer === 'undefined') {
-      console.error("Puppeteer/Chromium dependencies missing. Ensure 'puppeteer-core' and '@sparticuz/chromium' are installed.");
-      return new Response("Backend PDF generation components missing.", { status: 503 });
-  }
-  // --- END NEW ---
+  // --- REMOVED Puppeteer dependency check ---
 
-  let session;
+  // --- Authorization Check (Session or Guest Header) ---
+  let userId = null;
+  let isGuest = false;
+  let guestIdHeader = null;
+  let project = null;
+
   try {
-      session = await getServerSession(authOptions);
-      if (!session || !session.user || !session.user.id) {
-          return new Response("Unauthorized", { status: 401 });
-      }
-  } catch (authError) {
-       console.error("SSE Auth Error:", authError);
-       return new Response("Authentication error", { status: 500 });
+    const session = await getServerSession(authOptions);
+    guestIdHeader = request.headers.get('X-Guest-ID');
+    // --- NEW: Check for guestId query parameter ---
+    const url = new URL(request.url);
+    const guestIdQuery = url.searchParams.get('guestId');
+    // --- END NEW ---
+
+    if (session && session.user && session.user.id) {
+      userId = session.user.id;
+    // --- UPDATED: Check header OR query parameter ---
+    } else if (guestIdHeader || guestIdQuery) {
+      // Prioritize header, fallback to query parameter
+      const effectiveGuestId = guestIdHeader || guestIdQuery;
+      isGuest = true;
+      console.log(`BoM Report API: Guest access attempt with ID: ${effectiveGuestId} (Header: ${guestIdHeader ? 'Yes' : 'No'}, Query: ${guestIdQuery ? 'Yes' : 'No'})`);
+    } else if (guestIdHeader) {
+    } else {
+      // Unauthorized if no session AND no guest ID (header or query)
+      return new Response("Unauthorized", { status: 401 });
+    }
+
+    await connectMongoDB();
+    project = await Project.findById(projectId);
+
+    if (!project) {
+        return new Response("Project not found", { status: 404 });
+    }
+
+    // Verify ownership or guest access
+    if (userId) {
+        if (!project.owner || project.owner.toString() !== userId) {
+             return new Response("Forbidden", { status: 403 });
+        }
+    } else if (isGuest) {
+        // Use the effective guest ID (header or query) for comparison
+        const effectiveGuestId = guestIdHeader || guestIdQuery;
+        if (!project.guestOwnerId || project.guestOwnerId !== effectiveGuestId) {
+             console.log(`BoM Report API: Guest ID mismatch: EffectiveID=${effectiveGuestId}, Project=${project.guestOwnerId}`);
+             return new Response("Forbidden (Guest Access Denied)", { status: 403 });
+        }
+    } else {
+         return new Response("Unauthorized", { status: 401 });
+    }
+    // Authorization passed
+
+  } catch (authOrDbError) {
+       console.error("BoM SSE Auth/DB Error:", authOrDbError);
+       return new Response("Error processing request", { status: 500 });
   }
-  const userId = session.user.id;
+  // --- End Authorization Check ---
+
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -243,11 +194,8 @@ export async function GET(request, { params }) { // Use standard { params } dest
       sendSseMessage(controller, { status: 'Initializing BoM report...' });
 
       try {
-        await connectMongoDB();
-
-        const project = await Project.findById(projectId);
-        if (!project || project.owner.toString() !== userId) {
-          throw new Error('Project not found or forbidden');
+        if (!project) {
+             throw new Error('Project data unavailable after authorization.');
         }
 
         sendSseMessage(controller, { status: 'Fetching diagram list...' });
@@ -292,12 +240,11 @@ export async function GET(request, { params }) { // Use standard { params } dest
         const diagramNamesString = processedDiagramNames.join(', ');
         const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract all text content accurately. Focus on text relevant to components, materials, dimensions, and quantities.`;
         sendSseMessage(controller, { status: 'Performing OCR...' });
-        const ocrText = await callGemini(ocrPrompt, fileParts, true); // Relaxed safety for OCR
+        const ocrText = await callGemini(ocrPrompt, fileParts, true);
         if (!ocrText) throw new Error("OCR process returned empty text.");
         sendSseMessage(controller, { status: 'Text extraction complete.' });
 
         // --- Step 2: Generate BoM Report as HTML ---
-        // --- UPDATED PROMPT ---
         const bomPrompt = `Based on the following OCR text extracted from engineering diagrams (Project: ${project.name}), generate a detailed Bill of Materials (BoM) in **HTML format**.
 
 **Instructions for HTML Structure:**
@@ -318,49 +265,61 @@ ${ocrText}
 ---
 
 Generate the Bill of Materials report in HTML format now.`;
-        // --- END UPDATED PROMPT ---
 
         sendSseMessage(controller, { status: 'Generating Bill of Materials (HTML)...' });
-        let bomReportHtml = await callGemini(bomPrompt, [], false); // Default safety
+        let bomReportHtml = await callGemini(bomPrompt, [], false);
         if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML.");
 
         // --- Clean up Gemini's Markdown code fences ---
         console.log("Cleaning Gemini HTML output...");
-        bomReportHtml = bomReportHtml.trim(); // Remove leading/trailing whitespace
+        bomReportHtml = bomReportHtml.trim();
         if (bomReportHtml.startsWith('```html')) {
-            bomReportHtml = bomReportHtml.substring(7).trimStart(); // Remove ```html and leading newline/space
+            bomReportHtml = bomReportHtml.substring(7).trimStart();
         }
         if (bomReportHtml.endsWith('```')) {
-            bomReportHtml = bomReportHtml.substring(0, bomReportHtml.length - 3).trimEnd(); // Remove ``` and trailing newline/space
+            bomReportHtml = bomReportHtml.substring(0, bomReportHtml.length - 3).trimEnd();
         }
         console.log("HTML output cleaned.");
         // --- End cleanup ---
 
         sendSseMessage(controller, { status: 'BoM generated.' });
 
-        // --- Step 3: Create PDF from HTML ---
-        // --- UPDATED CALL ---
-        sendSseMessage(controller, { status: 'Creating PDF document from HTML...' });
-        const pdfBytes = await createPdfFromHtml(bomReportHtml);
-        // --- END UPDATED CALL ---
-        sendSseMessage(controller, { status: 'PDF created.' });
+        // --- Step 3: Convert HTML to PDF using External API ---
+        sendSseMessage(controller, { status: 'Converting HTML to PDF via API...' });
+        let pdfUrl = null;
+        try {
+            console.log(`Calling HTML to PDF API: ${HTML_TO_PDF_API_URL}`);
+            const apiResponse = await fetch(HTML_TO_PDF_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html: bomReportHtml }),
+            });
 
-        // --- Step 4: Upload PDF to GCS (Temporary) ---
-        sendSseMessage(controller, { status: 'Uploading temporary report...' });
-        const reportFileName = `temp-reports/bom_report_${projectId}_${Date.now()}.pdf`;
-        const gcsReportFile = storage.bucket(GCS_BUCKET_NAME).file(reportFileName);
-        await gcsReportFile.save(Buffer.from(pdfBytes), { contentType: 'application/pdf' });
+            if (!apiResponse.ok) {
+                const errorBody = await apiResponse.text();
+                console.error(`HTML to PDF API Error (${apiResponse.status}): ${errorBody}`);
+                throw new Error(`HTML to PDF conversion failed with status ${apiResponse.status}.`);
+            }
 
-        // --- Step 5: Generate Signed URL ---
-        sendSseMessage(controller, { status: 'Generating download link...' });
-        const [signedUrl] = await gcsReportFile.getSignedUrl({
-            action: 'read',
-            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-        });
+            const result = await apiResponse.json();
+            // --- UPDATED: Check for public_url instead of pdf_url ---
+            if (!result.public_url) { // Assuming success is implicit if public_url exists
+                 console.error("HTML to PDF API did not return public_url:", result);
+                 throw new Error("HTML to PDF conversion API call succeeded but response format was invalid (missing public_url).");
+            }
+            pdfUrl = result.public_url; // Use public_url
+            console.log("HTML to PDF API conversion successful. PDF URL:", pdfUrl);
+            sendSseMessage(controller, { status: 'PDF conversion complete.' });
 
-        // --- Step 6: Send Completion Event ---
-        sendSseMessage(controller, { downloadUrl: signedUrl }, 'complete');
-        console.log(`BoM SSE stream complete for project ${projectId}. Sent download URL.`);
+        } catch (apiError) {
+             console.error("Error calling HTML to PDF API:", apiError);
+             throw new Error(`Failed to convert HTML to PDF: ${apiError.message}`);
+        }
+        // --- End API Call ---
+
+        // --- Step 4: Send Completion Event with Public URL ---
+        sendSseMessage(controller, { public_url: pdfUrl }, 'complete'); // Use public_url as requested
+        console.log(`BoM SSE stream complete for project ${projectId}. Sent public URL: ${pdfUrl}`);
 
       } catch (error) {
         console.error(`BoM SSE Error for project ${projectId}:`, error);
@@ -376,11 +335,11 @@ Generate the Bill of Materials report in HTML format now.`;
         } catch (e) {
              console.error(`BoM SSE Error: Failed to close stream for project ${projectId}:`, e);
         }
-      }
+      } // Closing brace for finally block
     }
-  }); // Add semicolon after ReadableStream definition
+  });
 
-  return new Response(stream, { // Add semicolon after return statement
+  return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

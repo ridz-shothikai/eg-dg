@@ -1,30 +1,47 @@
-# Active Context: Docker Dev Env & Dependency Updates
+# Active Context: Layout Refactor & Guest Flow Implementation
 
-**Date:** April 9, 2025
+**Date:** April 9, 2025 (Late Afternoon Update)
 
-**Status:** Updated project dependencies (Next.js 15, React 19, Tailwind 4). Simplified Docker setup for local development using Docker Compose. Minor updates to authentication routes.
+**Status:** Refactored Header and Sidebar into reusable components with conditional rendering based on authentication status and route. Implemented guest user workflow with local storage persistence and data association on signup. Adjusted loading spinner presentation.
 
-**Recent Activity (April 9):**
-- **Dependency Updates:** Updated major dependencies including Next.js (v15.2.4), React (v19.0.0), Tailwind CSS (v4), and others in `package.json` and `package-lock.json`.
-- **Docker Simplification:** Modified `Dockerfile` to only include the `development` stage, commenting out production stages.
-- **Docker Compose:** Added `docker-compose.yml` to manage the local development container build and runtime, targeting the `development` stage in the Dockerfile.
-- **Auth Route Updates:** Minor changes to `src/app/api/auth/[...nextauth]/route.js` (exported `authOptions`, logging) and `src/app/api/auth/register/route.js` (logging, commented out auto-login).
-- **Memory Bank Update:** Updated `techContext.md` and `systemPatterns.md` to reflect the Docker and dependency changes.
+**Recent Activity (April 9 - Afternoon):**
+- **Layout Refactor:**
+    - Created reusable `Header` component (`src/components/Header.js`) with conditional navigation links (Public vs. Authenticated-Public vs. Authenticated-Private).
+    - Updated `Sidebar` component (`src/components/Sidebar.js`) to render only on authenticated, non-public routes.
+    - Updated main layout (`src/app/layout.js`) to use the new `Header` and `Sidebar` components, removing duplicated code from individual pages.
+    - Refactored static pages (`/`, `/solutions`, `/how-it-works`, `/use-cases`, `/resources`) to remove inline header code.
+    - Added logic to `Header` to fetch the first project ID for the "Dashboard" link when authenticated on public routes.
+    - Fixed main content width issue on public pages by adjusting flex properties and adding `w-full` in `layout.js`.
+- **Loading Spinner Adjustment:**
+    - Modified `LoadingSpinner` component (`src/components/LoadingSpinner.js`) to accept a `size` prop.
+    - Updated project detail page (`/project/[projectId]/page.js`) to center the main loading spinner and use a smaller size (`md`).
+- **Landing Page Redesign:**
+    - Replaced the previous root page (`/`) content with a new structure.
+    - Implemented sections: Sticky Header, Hero (with guest upload), Core Features, Workflow, Use Cases, FAQ, Footer.
+    - Removed "Social Proof" and "Pricing" sections.
+    - Updated header navigation links.
+    - Applied project's dark color scheme.
+    - Used placeholders for assets.
+- **Guest User Workflow:**
+    - Implemented guest ID generation/storage (`localStorage`) on landing page upload.
+    - Updated frontend (`/`, `/project/[id]`, `/signup`) to handle guest state, send `X-Guest-ID` header, display banner, and clear `guestId` on registration.
+    - Updated backend models (`Project`, `Diagram`) with `guestOwnerId`/`guestUploaderId` fields.
+    - Updated backend APIs (`/api/projects`, `/api/upload`, `/api/auth/register`, project-specific APIs) to handle guest creation, authorization via `X-Guest-ID`, and data association on registration.
+- **New Pages Created:** Added placeholder pages for `/solutions`, `/how-it-works`, `/use-cases`, `/resources`.
+- **Layout Fix:** Resolved scrolling issue in `src/app/layout.js`.
 
-**Previous Activity (March 30):**
-- **Project Renaming:** Replaced "Doclyze" with "Engineering Diagram Insights".
-- **Build Error Fix:** Resolved syntax error in `bom/route.js`.
-- **Puppeteer Environment Compatibility:** Ensured correct Puppeteer setup for local/prod.
-- **Dockerfile Update (Previous):** Added production stage dependencies (now commented out).
-- **API Route Fixes:** Addressed `sync-files` params error, added Gemini HTML cleanup.
+**Previous Activity (April 9 - Morning/Dependencies):**
+- **Dependency Updates:** Updated major dependencies (Next.js 15, React 19, Tailwind 4).
+- **Docker Simplification:** Simplified `Dockerfile` and added `docker-compose.yml`.
+- **Auth Route Updates:** Minor changes to `nextauth` and `register` routes.
 
 **Current Focus:**
-- Ensuring application stability after major dependency upgrades (Next.js 15, React 19).
-- Testing the new Docker Compose local development setup.
-- Verifying authentication flows after minor route updates.
+- Testing the layout changes (Header/Sidebar visibility) across different routes and authentication states.
+- Verifying the complete guest user flow: upload -> dashboard access (guest mode) -> signup -> data association -> authenticated dashboard access.
+- Testing core features (reports, chat) in both authenticated and guest modes.
 
 **Next Steps:**
-1.  Thoroughly test core features (upload, sync, reports, chat) with the new dependencies and Docker setup.
-2.  Address any regressions or issues arising from the dependency upgrades.
-3.  Continue with previous testing goals (report generation, sync, chat) once stability is confirmed.
-4.  Refine PDF formatting/styling in the report generation API routes.
+1.  Thoroughly test the guest user flow and the conditional layout rendering.
+2.  Begin populating content for the `/solutions`, `/how-it-works`, `/use-cases`, and `/resources` pages.
+3.  Replace placeholder assets (logo, icons) when available.
+4.  Address any regressions from recent changes.

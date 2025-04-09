@@ -188,23 +188,41 @@ export async function POST(request) {
     }
 
 
-    // --- Get User Session ---
+    // --- Get User Session (if available) ---
+    let userId = null;
     const session = await getServerSession(authOptions);
-    if (!session || !session.user || !session.user.id) {
-      // Clean up GCS file if user is not authenticated after upload? Maybe not.
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    if (session && session.user && session.user.id) {
+      userId = session.user.id; // Set userId if session exists
     }
-    const userId = session.user.id;
 
-     // --- Verify Project Ownership ---
+     // --- Verify Project Exists and Ownership/Guest Status ---
      const project = await Project.findById(projectId);
-     if (!project || project.owner.toString() !== userId) {
-       // Clean up GCS file if project is invalid? Maybe not.
-       return NextResponse.json({ message: 'Project not found or forbidden' }, { status: 404 });
+     if (!project) {
+       // Clean up GCS file if project is invalid? Maybe not for now.
+       return NextResponse.json({ message: 'Project not found' }, { status: 404 });
      }
 
+     // Check ownership based on whether a user is logged in
+     let guestId = null; // To store guestId if applicable
+     if (userId) {
+       // Logged-in user: Check if they own the project
+       if (!project.owner || project.owner.toString() !== userId) {
+         return NextResponse.json({ message: 'Forbidden: You do not own this project' }, { status: 403 });
+       }
+     } else {
+       // Guest user: Check if the project is a guest project (has guestOwnerId)
+       if (!project.guestOwnerId) {
+         // If owner is also null, it's an orphaned project - potentially block?
+         // For now, treat as forbidden if it's not explicitly a guest project
+         return NextResponse.json({ message: 'Forbidden: Project owner information missing' }, { status: 403 });
+       }
+       // Store the guestId for saving to the diagram
+       guestId = project.guestOwnerId;
+     }
+     // If checks pass, proceed.
+
     // --- Create Diagram record in MongoDB ---
-    const newDiagram = new Diagram({
+    const diagramData = {
       fileName: fileName,
       storagePath: storagePath, // Store GCS path
       // geminiFileUri will be added later by the prepare endpoint
@@ -215,9 +233,16 @@ export async function POST(request) {
       billOfMaterials: billOfMaterials,
       complianceResults: complianceResults,
       project: projectId,
-      uploadedBy: userId,
+      uploadedBy: userId, // Will be null for guest uploads
       processingStatus: 'Uploaded', // Initial status
-    });
+    };
+
+    // Add guestUploaderId if it's a guest upload
+    if (guestId) {
+      diagramData.guestUploaderId = guestId;
+    }
+
+    const newDiagram = new Diagram(diagramData);
 
     await newDiagram.save();
 
