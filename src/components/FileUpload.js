@@ -106,15 +106,11 @@ export default function FileUpload({ projectId }) { // Accept projectId as prop
     onDragLeave: () => setIsDragging(false),
     // Define accepted file types based on PRD (PDF, PNG, JPG, DWG, DXF)
     // Note: MIME types for DWG/DXF can be tricky and might need refinement.
-    // Using common ones, but browser support varies.
+    // Define accepted file types: PDF, PNG, JPG/JPEG
     accept: {
       'application/pdf': ['.pdf'],
       'image/png': ['.png'],
-      'image/jpeg': ['.jpg', '.jpeg'],
-      'image/vnd.dwg': ['.dwg'], // Common but might not be universally recognized
-      'image/vnd.dxf': ['.dxf'], // Common but might not be universally recognized
-      'application/acad': ['.dwg'], // Alternative
-      'application/dxf': ['.dxf']   // Alternative
+      'image/jpeg': ['.jpg', '.jpeg']
     },
     // maxFiles: 1 // Allow multiple files
   });
@@ -133,7 +129,7 @@ export default function FileUpload({ projectId }) { // Accept projectId as prop
         ) : (
           <div>
             <p className="text-lg font-semibold mb-2">Drag {'\''}n{'\''} drop diagram file here, or click to select</p>
-            <p className="text-sm">Supported formats: PDF, PNG, JPG, DWG, DXF</p>
+            <p className="text-sm">Supported formats: PDF, PNG, JPG/JPEG</p>
           </div>
         )}
       </div>

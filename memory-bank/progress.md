@@ -27,12 +27,18 @@
     -   Backend API routes (`ocr/`, `bom/`, `compliance/`) implemented using Server-Sent Events (SSE). Build errors resolved.
     -   APIs now download files directly from GCS, perform OCR & specific report generation via Gemini.
     -   **Gemini HTML Cleanup:** Extraneous Markdown code fences (` ```html `) are removed from Gemini's HTML output before PDF creation.
-    -   **PDF Creation (Puppeteer):** Uses conditional configuration (`executablePath`, `args`) for reliable PDF generation in both local dev and Vercel environments.
+    -   **PDF Creation (Puppeteer on Alpine Linux / Codespace):** Successfully troubleshooted and configured Puppeteer for the Alpine Linux environment.
+        -   Identified the environment as Alpine Linux.
+        -   Installed `chromium` and necessary system dependencies via `apk`.
+        -   Configured the project to use `puppeteer-core` (via `package.json`).
+        -   Updated report generation code (`ocr/route.js`) to launch Puppeteer using the system-installed Chromium (`/usr/bin/chromium-browser`) with appropriate launch arguments (`--no-sandbox`, `--disable-setuid-sandbox`).
+        -   Verified the setup using a test script (`test-browser.js`).
     -   Temporary PDF uploaded to GCS, signed URL sent via SSE.
     -   Frontend handlers (`handleOcrDownload`, etc.) use `EventSource` for real-time status and opening PDF.
     -   Independent loading/status/error state management for each report button.
     -   Generic error messages shown to user for backend failures.
 -   **Git Configuration:** `.gitignore` updated to exclude problematic paths (`NUL`, external repo).
+-   **MCP Server Setup:** Successfully installed and configured the Perplexity MCP server (`github.com/pashpashpash/perplexity-mcp`) for enhanced research capabilities.
 
 **What's Left to Build (High Level):**
 -   Thorough testing of Vercel deployment (upload, sync, reports, chat streaming).

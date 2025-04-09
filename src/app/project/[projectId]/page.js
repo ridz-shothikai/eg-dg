@@ -381,21 +381,22 @@ export default function ProjectDetailPage() {
 
       {/* Right Column: Chat Interface */}
       <div className="w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col overflow-hidden">
-        <h2 className="text-2xl font-semibold mb-4 text-white">Chat for Insights</h2> {/* Updated Title */}
-        {/* Ensure outer container allows vertical scroll but hides horizontal */}
-        <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col overflow-y-auto overflow-x-hidden">
-           {preparationStatus === 'loading' ? (
-             <div className="flex-grow flex items-center justify-center"><LoadingSpinner text="Preparing documents for chat..." /></div> // Restored text prop
-          ) : preparationStatus === 'processing' ? (
-             <div className="flex-grow flex items-center justify-center text-yellow-400"><LoadingSpinner text="Documents are processing, please wait..." /></div> // Restored text prop
-          ) : preparationStatus === 'failed' ? (
-             <p className="text-red-500 text-center flex-grow flex items-center justify-center">Failed to prepare documents for chat. Please try reloading.</p>
-          ) : preparationStatus === 'no_files' ? (
-             <p className="text-gray-400 text-center flex-grow flex items-center justify-center">Upload diagrams to enable contextual chat.</p>
-          ) : preparationStatus === 'ready' ? (
+        <h2 className="text-2xl font-semibold mb-4 text-white">Chat for Insights</h2>
+        {/* Main chat container - always rendered */}
+        <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col overflow-y-auto overflow-x-hidden relative"> {/* Added relative positioning */}
+
+          {/* Loading Spinner Overlay */}
+          {(preparationStatus === 'loading' || preparationStatus === 'processing') && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-80 z-10 rounded-lg">
+              <LoadingSpinner text={preparationStatus === 'loading' ? "Preparing documents for chat..." : "Documents are processing, please wait..."} />
+            </div>
+          )}
+
+          {/* Chat Content (History and Input) - Rendered only when ready */}
+          {preparationStatus === 'ready' && (
             <React.Fragment>
-              {/* Inner container for chat history, allow vertical scroll */}
-              <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4"> {/* Added mb-4 */}
+              {/* Inner container for chat history */}
+              <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4">
                 {/* Display Initial Summary if available and history is empty */}
                 {initialSummary && chatHistory.length === 0 && (
                   <div className="flex flex-col items-start"> {/* Model message style */}
@@ -452,30 +453,43 @@ export default function ProjectDetailPage() {
                     </div>
                   );
                  })}
-                 {/* Removed the separate loading indicator block */}
-                 {chatError && <p className="text-red-500 text-sm mt-2 self-start">{chatError}</p>} {/* Adjusted error message position */}
+                 {/* Chat Error Message */}
+                 {chatError && <p className="text-red-500 text-sm mt-2 self-start">{chatError}</p>}
               </div>
               {/* Input area */}
-              <div className="mt-auto flex pt-4 border-t border-gray-700"> {/* Added border */}
+              <div className="mt-auto flex pt-4 border-t border-gray-700">
                 <textarea
-                  className="flex-grow p-2 bg-gray-700 rounded-l border border-gray-600 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-70 resize-none" // Added resize-none
+                  className="flex-grow p-2 bg-gray-700 rounded-l border border-gray-600 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-70 resize-none"
                   placeholder="Ask questions about the diagrams..."
                   rows="2"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                  disabled={isChatLoading || preparationStatus !== 'ready'}
+                  disabled={isChatLoading || preparationStatus !== 'ready'} // Keep this check
                 ></textarea>
                 <button
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-2 rounded-r disabled:opacity-50 flex items-center justify-center" // Ensure button aligns
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-2 rounded-r disabled:opacity-50 flex items-center justify-center"
                   onClick={handleSendMessage}
-                  disabled={isChatLoading || !chatInput.trim() || preparationStatus !== 'ready'}
+                  disabled={isChatLoading || !chatInput.trim() || preparationStatus !== 'ready'} // Keep this check
                 >
                   Send
                 </button>
               </div>
             </React.Fragment>
-          ) : null }
+          )}
+
+          {/* Status Messages (Failed / No Files) - Rendered when applicable */}
+          {preparationStatus === 'failed' && (
+             <div className="flex-grow flex items-center justify-center">
+                <p className="text-red-500 text-center">Failed to prepare documents for chat. Please try reloading.</p>
+             </div>
+          )}
+          {preparationStatus === 'no_files' && (
+             <div className="flex-grow flex items-center justify-center">
+                <p className="text-gray-400 text-center">Upload diagrams to enable contextual chat.</p>
+             </div>
+          )}
+
         </div>
       </div>
     </div>
