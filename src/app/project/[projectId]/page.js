@@ -212,6 +212,48 @@ export default function ProjectDetailPage() {
     return () => { if (eventSourceRef.current) eventSourceRef.current.close(); };
   }, []);
 
+
+  // for chat input - tracks width dynamically
+    const chatContainerRef = useRef(null);
+    const [chatAreaWidthState, setChatAreaWidthState] = useState(0);
+
+    useEffect(() => {
+      let attempts = 0;
+      const maxAttempts = 20;
+    
+      const handleResize = () => {
+        if (chatContainerRef.current) {
+          const width = chatContainerRef.current.offsetWidth;
+          if (width > 0) {
+            setChatAreaWidthState(width);
+            clearInterval(intervalId); // Stop retrying once we have a valid width
+          }
+        }
+      };
+    
+      // Try every second, up to 5 times
+      const intervalId = setInterval(() => {
+        attempts++;
+        handleResize();
+    
+        if (attempts >= maxAttempts) {
+          clearInterval(intervalId);
+          if (!chatContainerRef.current || chatContainerRef.current.offsetWidth === 0) {
+            console.warn("Unable to get valid chat container width after 5 attempts.");
+          }
+        }
+      }, 350);
+    
+      // Listen to window resize events as well
+      window.addEventListener("resize", handleResize);
+    
+      return () => {
+        clearInterval(intervalId);
+        window.removeEventListener("resize", handleResize);
+      };
+    }, [chatContainerRef]);
+    
+
   // --- Report Download Handlers ---
   const handleOcrDownload = () => {
     if (!startReport('ocr')) return;
@@ -469,7 +511,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Right Column: Chat Interface - Use flex-grow to allow ChatInterface to fill height */}
-      <div className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col ${isGuestMode ? 'pt-12' : ''}`}>
+      <div ref={chatContainerRef} className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col ${isGuestMode ? 'pt-12' : ''}`}>
         <h2 className="text-2xl font-semibold mb-4 text-white flex-shrink-0">Chat for Insights</h2>
         {/* Render ChatInterface component and pass props */}
         <ChatInterface
@@ -485,6 +527,7 @@ export default function ProjectDetailPage() {
           preparationStatus={preparationStatus}
           copiedIndex={copiedIndex}
           onCopy={handleCopy}
+          chatAreaWidthState={chatAreaWidthState}
         />
       </div>
     </div>

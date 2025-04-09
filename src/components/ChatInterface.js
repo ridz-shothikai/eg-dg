@@ -34,24 +34,13 @@ export default function ChatInterface({
   preparationStatus, // Pass preparationStatus to show loading/error states
   copiedIndex, // Pass state for copy feedback
   onCopy, // Pass copy handler function
+  chatAreaWidthState
 }) {
-  const chatContainerRef = useRef(null);
+  
   const [customPrompts, setCustomPrompts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [promptsLoading, setPromptsLoading] = useState(true); // Loading state for prompts
   const [promptsError, setPromptsError] = useState(''); // Error state for prompts
-
-  // chat area width with useRef
-  const chatAreaWidth = useRef(null);
-  const [chatAreaWidthState, setChatAreaWidthState] = useState(0);
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      setChatAreaWidthState(chatContainerRef.current.offsetWidth);
-    }
-  }, []);
-
-  console.log("Chat area width:", chatAreaWidthState); // Debugging log
-
 
   // Fetch custom prompts on mount
   useEffect(() => {
@@ -76,11 +65,11 @@ export default function ChatInterface({
   }, []); // Empty dependency array means run once on mount
 
   // Effect for auto-scrolling chat
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [chatHistory]); // Trigger scroll on history change
+  // useEffect(() => {
+  //   if (chatContainerRef.current) {
+  //     chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+  //   }
+  // }, [chatHistory]); // Trigger scroll on history change
 
   // --- Handler for executing custom prompt ---
   const handleExecuteCustomPrompt = (promptText) => {
@@ -97,7 +86,7 @@ export default function ChatInterface({
 
   return (
     // Main chat container - takes remaining space, flex column, relative for loading overlay
-    <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col relative" ref={chatAreaWidth}>
+    <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col relative" >
 
       {/* Loading Spinner Overlay */}
       {(preparationStatus === 'loading' || preparationStatus === 'processing') && (
@@ -110,84 +99,83 @@ export default function ChatInterface({
       {preparationStatus === 'ready' && (
         <>
           {/* Inner container for chat history - THIS part scrolls */}
-          <div ref={chatContainerRef} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4">
-            {/* Display Initial Summary if available and history is empty */}
-            {initialSummary && chatHistory.length === 0 && (
-              <div className="flex flex-col items-start"> {/* Model message style */}
-                <div className="p-3 rounded-lg max-w-lg prose prose-invert bg-gray-600 text-white">
-                  <ReactMarkdown>{initialSummary}</ReactMarkdown>
-                </div>
-                {/* Suggested Questions Buttons */}
-                {suggestedQuestions.length > 0 && (
-                  <div className="mt-3 flex flex-col space-y-2 self-start w-full max-w-lg">
-                    {suggestedQuestions.map((q, i) => (
-                      <button
-                        key={i}
-                        onClick={() => onSuggestionClick(q)}
-                        disabled={isChatLoading}
-                        className="bg-gray-700 hover:bg-gray-600 text-indigo-300 text-sm text-left p-2 rounded border border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {q}
-                      </button>
-                    ))}
+          <div  style={{ maxHeight: "calc(100vh - 150px)" }} className="overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"          > 
+            <div style={{ paddingBottom:100 }} className="flex-grow overflow-y-auto space-y-4 pr-2 mb-4 ">
+              {/* Display Initial Summary if available and history is empty */}
+              {initialSummary && chatHistory.length === 0 && (
+                <div className="flex flex-col items-start"> {/* Model message style */}
+                  <div className="p-3 rounded-lg max-w-lg prose prose-invert bg-gray-600 text-white">
+                    <ReactMarkdown>{initialSummary}</ReactMarkdown>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Display Regular Chat History */}
-            {chatHistory.map((msg, index) => {
-              const isModel = msg.role === 'model';
-              // Check if this specific message is the loading placeholder
-              const isLoadingPlaceholder = isModel && msg.text === '' && isChatLoading && index === chatHistory.length - 1;
-
-              return (
-                // Container for each message row (bubble + optional copy button)
-                <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  {/* Message Bubble */}
-                  <div className={`p-3 rounded-lg max-w-lg prose prose-invert ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'} ${isLoadingPlaceholder ? 'flex items-center justify-center' : ''}`}>
-                    {isLoadingPlaceholder ? (
-                      <div className="w-3 h-3 bg-gray-400 rounded-full animate-zoom"></div>
-                    ) : isModel ? (
-                      <ReactMarkdown>{msg.text}</ReactMarkdown>
-                    ) : (
-                      msg.text
-                    )}
-                  </div>
-                  {/* Add Copy button UNDER completed model messages */}
-                  {isModel && !isLoadingPlaceholder && msg.text && (
-                    <button
-                      onClick={() => onCopy(msg.text, index)}
-                      className="mt-1 p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                      title={copiedIndex === index ? "Copied!" : "Copy text"}
-                    >
-                      <CopyIcon className="w-4 h-4" />
-                    </button>
+                  {/* Suggested Questions Buttons */}
+                  {suggestedQuestions.length > 0 && (
+                    <div className="mt-3 flex flex-col space-y-2 self-start w-full max-w-lg">
+                      {suggestedQuestions.map((q, i) => (
+                        <button
+                          key={i}
+                          onClick={() => onSuggestionClick(q)}
+                          disabled={isChatLoading}
+                          className="bg-gray-700 hover:bg-gray-600 text-indigo-300 text-sm text-left p-2 rounded border border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-              );
-            })}
-            {/* Chat Error Message */}
-            {chatError && <p className="text-red-500 text-sm mt-2 self-start">{chatError}</p>}
-          </div>
+              )}
 
-          {/* Custom Prompts Section */}
-          <div className="flex-shrink-0 pt-3 pb-2 border-t border-gray-700 flex items-center space-x-2">
-             <button
-               onClick={() => setIsModalOpen(true)}
-               className="p-1 rounded-full text-gray-400 hover:bg-gray-600 hover:text-white transition-colors flex-shrink-0"
-               title="Add Custom Prompt"
-             >
-                <AddIcon />
-             </button>
-             {/* Scrollable Prompt List */}
-             
+              {/* Display Regular Chat History */}
+              {chatHistory.map((msg, index) => {
+                const isModel = msg.role === 'model';
+                // Check if this specific message is the loading placeholder
+                const isLoadingPlaceholder = isModel && msg.text === '' && isChatLoading && index === chatHistory.length - 1;
+
+                return (
+                  // Container for each message row (bubble + optional copy button)
+                  <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    {/* Message Bubble */}
+                    <div className={`p-3 rounded-lg max-w-lg prose prose-invert ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'} ${isLoadingPlaceholder ? 'flex items-center justify-center' : ''}`}>
+                      {isLoadingPlaceholder ? (
+                        <div className="w-3 h-3 bg-gray-400 rounded-full animate-zoom"></div>
+                      ) : isModel ? (
+                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                      ) : (
+                        msg.text
+                      )}
+                    </div>
+                    {/* Add Copy button UNDER completed model messages */}
+                    {isModel && !isLoadingPlaceholder && msg.text && (
+                      <button
+                        onClick={() => onCopy(msg.text, index)}
+                        className="mt-1 p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                        title={copiedIndex === index ? "Copied!" : "Copy text"}
+                      >
+                        <CopyIcon className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {/* Chat Error Message */}
+              {chatError && <p className="text-red-500 text-sm mt-2 self-start">{chatError}</p>}
+            </div>
           </div>
+        
 
           {/* Input area */}
-          <div className={`flex flex-row pt-2 border-t border-gray-700 fixed w-[${chatAreaWidthState}px] bottom-0 bg-amber-700`}> {/* Reduced top padding */}
+          <div style={{ width: chatAreaWidthState-40 , marginLeft:-20}} className={`flex flex-row pt-2 border-t border-gray-700 fixed bottom-0 `}> {/* Reduced top padding */}
             <div className="flex-grow  bg-gray-800 rounded-lg shadow p-2 w-full flex flex-col relative">
                 <div className="flex-grow overflow-x-auto whitespace-nowrap space-x-2 pb-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-700">
+                   
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="p-1 rounded-full text-gray-400 hover:bg-gray-600 hover:text-white transition-colors flex-shrink-0"
+                  title="Add Custom Prompt"
+                >
+                    <AddIcon />
+                </button>
+                   
                     {promptsLoading && <span className="text-xs text-gray-400 italic">Loading prompts...</span>}
                     {promptsError && <span className="text-xs text-red-500">{promptsError}</span>}
                     {!promptsLoading && !promptsError && customPrompts.length === 0 && <span className="text-xs text-gray-500 italic">No custom prompts saved.</span>}
