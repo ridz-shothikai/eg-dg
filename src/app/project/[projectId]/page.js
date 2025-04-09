@@ -528,6 +528,7 @@ export default function ProjectDetailPage() {
           copiedIndex={copiedIndex}
           onCopy={handleCopy}
           chatAreaWidthState={chatAreaWidthState}
+          isGuestMode={isGuestMode} // Pass guest mode status
         />
       </div>
     </div>

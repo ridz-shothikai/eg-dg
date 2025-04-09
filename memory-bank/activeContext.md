@@ -17,6 +17,11 @@
     - Resolved layout inconsistencies between landing page and other static pages by ensuring consistent use of a wrapping `<main>` tag with `container mx-auto`.
     - Fixed issues causing unwanted scrollbars/black bars on static pages by adjusting flexbox properties in `layout.js`.
     - Updated landing page (`/`) file upload area styling: made dashed border always visible (white color) and added background change on hover for inner area feedback.
+- **Chat UI Refinements:**
+    - Implemented dynamic width calculation for the chat input area in `ProjectDetailPage` (`page.js`), passing the width to `ChatInterface`. (Initial implementation + user refinement using `setInterval` for robustness and `resize` listener).
+    - Implemented auto-scrolling for the chat history in `ChatInterface` (`ChatInterface.js`) on new messages.
+    - Adjusted scrollbar styling in `ChatInterface` for a thinner, rounded appearance.
+    - Adjusted `maxHeight` of the chat history container in `ChatInterface` for layout refinement.
 
 **Previous Activity (April 9 - Afternoon):**
 - **Layout Refactor:** Created reusable `Header` and `Sidebar` components with conditional rendering. Implemented guest user workflow basics (ID generation, storage, header). Adjusted loading spinner. Redesigned landing page structure. Created placeholder static pages.
@@ -26,6 +31,7 @@
 - Verifying the fixes for report generation (both functionality and PDF styling).
 - Confirming guest user report downloads work correctly.
 - Testing landing page UI interactions (upload area hover/border).
+- Testing chat UI functionality (dynamic width, auto-scroll, styling).
 
 **Next Steps:**
 1.  Thoroughly test report generation for authenticated and guest users.

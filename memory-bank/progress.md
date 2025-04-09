@@ -31,7 +31,15 @@
 -   **File Handling:** GCS upload for diagrams. API direct downloads from GCS for chat.
 -   **Diagram Processing:** Google Cloud Vision OCR on upload.
 -   **Project Management:** API for creating/fetching projects (supports guest), Sidebar display, New Project modal.
--   **Chat:** Contextual chat UI, streaming responses, history, guest access support.
+-   **Chat:**
+    -   Contextual chat UI (`ChatInterface.js`).
+    -   Streaming responses from backend API.
+    -   Chat history display.
+    -   Guest access support.
+    -   Dynamic width calculation for input area based on container size (`ProjectDetailPage` -> `ChatInterface`).
+    -   Auto-scrolling of chat history on new messages (`ChatInterface.js`).
+    -   Custom scrollbar styling (thin, rounded, custom colors) (`ChatInterface.js`).
+    -   Adjusted chat history container height (`ChatInterface.js`).
 -   **Report Generation (OCR/PDR, BoM, Compliance):** SSE implementation, Gemini analysis, HTML cleanup, **External API PDF generation**, guest access support (via query param), professional PDF styling via embedded CSS.
 -   **Git Configuration:** `.gitignore` updated.
 -   **MCP Server Setup:** Perplexity MCP server configured.
@@ -41,6 +49,7 @@
     -   Thorough testing of report generation (auth/guest, PDF styling).
     -   Thorough testing of the complete guest user flow.
     -   Testing layout consistency across all static pages.
+    -   Testing chat UI functionality (dynamic width, auto-scroll, styling, responsiveness).
     -   Testing Vercel deployment.
     -   Unit/Integration tests.
 -   **Content Population:** Add real content to `/solutions`, `/how-it-works`, `/use-cases`, `/resources` pages.

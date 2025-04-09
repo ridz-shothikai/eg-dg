@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react'; // Added useState
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation'; // Import useRouter
 import ReactMarkdown from 'react-markdown';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import AddPromptModal from '@/components/AddPromptModal'; // Import the modal
@@ -34,16 +35,23 @@ export default function ChatInterface({
   preparationStatus, // Pass preparationStatus to show loading/error states
   copiedIndex, // Pass state for copy feedback
   onCopy, // Pass copy handler function
-  chatAreaWidthState
+  chatAreaWidthState,
+  isGuestMode // Accept isGuestMode prop
 }) {
+  const router = useRouter(); // Initialize router
   const chatContainerRef = useRef(null); // Ref for the scrollable chat history container
   const [customPrompts, setCustomPrompts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [promptsLoading, setPromptsLoading] = useState(true); // Loading state for prompts
   const [promptsError, setPromptsError] = useState(''); // Error state for prompts
 
-  // Fetch custom prompts on mount
+  // Fetch custom prompts on mount only if NOT in guest mode
   useEffect(() => {
+    if (isGuestMode) {
+      setPromptsLoading(false); // Don't attempt to load for guests
+      return;
+    }
+
     const fetchPrompts = async () => {
       setPromptsLoading(true);
       setPromptsError('');
@@ -56,13 +64,16 @@ export default function ChatInterface({
         setCustomPrompts(data.prompts || []);
       } catch (error) {
         console.error("Error fetching custom prompts:", error);
-        setPromptsError('Could not load custom prompts.');
+        // Only set error if not guest
+        if (!isGuestMode) {
+            setPromptsError('Could not load custom prompts.');
+        }
       } finally {
         setPromptsLoading(false);
       }
     };
     fetchPrompts();
-  }, []); // Empty dependency array means run once on mount
+  }, [isGuestMode]); // Re-run if guest mode changes (though unlikely in this component's lifecycle)
 
   // Effect for auto-scrolling chat to the bottom on new messages
   useEffect(() => {
@@ -86,7 +97,7 @@ export default function ChatInterface({
 
   return (
     // Main chat container - takes remaining space, flex column, relative for loading overlay
-    <div className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col relative" >
+    <div style={{ height:"70vh" }} className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col relative" >
 
       {/* Loading Spinner Overlay */}
       {(preparationStatus === 'loading' || preparationStatus === 'processing') && (
@@ -169,18 +180,26 @@ export default function ChatInterface({
             <div className="flex-grow  bg-gray-800 rounded-lg shadow p-2 w-full flex flex-col relative">
                 <div className="flex-grow overflow-x-auto whitespace-nowrap space-x-2 pb-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-700">
                    
+                {/* Add Prompt Button - Conditional onClick */}
                 <button
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={() => {
+                    if (isGuestMode) {
+                      router.push('/login?reason=custom_prompts'); // Redirect guest to login
+                    } else {
+                      setIsModalOpen(true); // Open modal for logged-in user
+                    }
+                  }}
                   className="p-1 rounded-full text-gray-400 hover:bg-gray-600 hover:text-white transition-colors flex-shrink-0"
-                  title="Add Custom Prompt"
+                  title={isGuestMode ? "Log in to add custom prompts" : "Add Custom Prompt"}
                 >
                     <AddIcon />
                 </button>
-                   
-                    {promptsLoading && <span className="text-xs text-gray-400 italic">Loading prompts...</span>}
-                    {promptsError && <span className="text-xs text-red-500">{promptsError}</span>}
-                    {!promptsLoading && !promptsError && customPrompts.length === 0 && <span className="text-xs text-gray-500 italic">No custom prompts saved.</span>}
-                    {!promptsLoading && !promptsError && customPrompts.map((p) => (
+
+                    {/* Only show loading/error/prompts if not guest */}
+                    {!isGuestMode && promptsLoading && <span className="text-xs text-gray-400 italic">Loading prompts...</span>}
+                    {!isGuestMode && promptsError && <span className="text-xs text-red-500">{promptsError}</span>}
+                    {!isGuestMode && !promptsLoading && !promptsError && customPrompts.length === 0 && <span className="text-xs text-gray-500 italic">No custom prompts saved.</span>}
+                    {!isGuestMode && !promptsLoading && !promptsError && customPrompts.map((p) => (
                         <button
                             key={p._id}
                             onClick={() => handleExecuteCustomPrompt(p.prompt)} // Use new handler
