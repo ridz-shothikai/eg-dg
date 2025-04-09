@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ChatInterface from '@/components/ChatInterface'; // Import the new component
-// Removed ReactMarkdown import if not used elsewhere
+// Removed ReactMarkdown import
 // Removed CopyIcon component definition
 
 export default function ProjectDetailPage() {
@@ -36,7 +36,7 @@ export default function ProjectDetailPage() {
   });
   const [activeReportType, setActiveReportType] = useState(null); // Track which report is currently running
 
-  const chatContainerRef = useRef(null);
+  // Removed chatContainerRef as it's now inside ChatInterface
   const eventSourceRef = useRef(null);
 
   // --- Helper to manage report state ---
@@ -205,10 +205,7 @@ export default function ProjectDetailPage() {
   }, [projectId, status, router, guestId, isGuestMode]);
 
 
-  // Effect for auto-scrolling chat
-  useEffect(() => {
-    if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-  }, [chatHistory]);
+  // Removed chat scroll effect, now handled in ChatInterface
 
   // Cleanup EventSource on component unmount
   useEffect(() => {
@@ -339,12 +336,7 @@ export default function ProjectDetailPage() {
       setChatHistory(prev => prev.filter((_, index) => index !== modelPlaceholderIndex || prev[modelPlaceholderIndex]?.text));
     } finally {
       setIsChatLoading(false);
-      // Ensure chat scrolls down after streaming finishes
-       setTimeout(() => {
-           if (chatContainerRef.current) {
-               chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-           }
-       }, 100); // Small delay to allow final render
+      // Auto-scroll is now handled within ChatInterface
     }
   };
 
@@ -363,6 +355,7 @@ export default function ProjectDetailPage() {
     if (isChatLoading || preparationStatus !== 'ready') return; // Don't allow if chat is busy or not ready
     setChatInput(question);
     // Use a timeout to allow state to update before sending message
+    // Need to call handleSendMessage defined in this component
     setTimeout(() => {
         handleSendMessage();
     }, 0);
@@ -372,21 +365,17 @@ export default function ProjectDetailPage() {
   // --- Render Logic ---
   // Show specific loading state while guestId is being checked
   if (status === 'unauthenticated' && !guestId && !error) {
-     // Removed flex-grow, main layout handles expansion. Added w-full h-full for centering within main.
      return <div className="w-full h-full flex items-center justify-center bg-gray-900"><LoadingSpinner text="Checking guest access..." size="md" /></div>;
   }
 
-  // Removed flex-grow, main layout handles expansion. Added w-full h-full for centering within main.
   if (loading || status === 'loading') return <div className="w-full h-full flex items-center justify-center bg-gray-900"><LoadingSpinner text="Loading project..." size="md" /></div>;
-  // Removed flex-grow, main layout handles expansion. Added w-full h-full for centering within main.
   if (error) return <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white p-4 text-center">Error: {error}</div>;
-  // Removed flex-grow, main layout handles expansion. Added w-full h-full for centering within main.
   if (!project) return <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white">Project data unavailable.</div>;
 
 
   return (
-    // Added h-full to fill the main layout area
-    <div className="flex flex-col md:flex-row relative flex-grow h-full"> {/* Added h-full */}
+    // Reverted: Removed h-full. Relying on flex-grow from layout.
+    <div className="flex flex-col md:flex-row relative flex-grow"> {/* Removed h-full */}
        {/* Guest Mode Banner */}
        {isGuestMode && (
         <div className="absolute top-0 left-0 right-0 bg-yellow-600 text-black text-center p-2 text-sm z-10">
@@ -479,10 +468,6 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
-      {/* Right Column: Chat Interface */}
-       {/* Added pt-10 if guest mode to avoid banner overlap */}
-       {/* Ensure this outer div allows the inner content to flex and fill height */}
-      {/* Right Column: Chat Interface - Ensure it fills height */}
       {/* Right Column: Chat Interface - Use flex-grow to allow ChatInterface to fill height */}
       <div className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col ${isGuestMode ? 'pt-12' : ''}`}>
         <h2 className="text-2xl font-semibold mb-4 text-white flex-shrink-0">Chat for Insights</h2>
