@@ -308,14 +308,107 @@ Generate the Compliance Report in HTML format now.`;
         sendSseMessage(controller, { status: 'Compliance analysis complete.' });
 
         // --- Step 4: Convert HTML to PDF using External API ---
-        sendSseMessage(controller, { status: 'Converting HTML to PDF via API...' });
+        sendSseMessage(controller, { status: 'Applying styles and converting HTML to PDF via API...' }); // Updated status message
+
+        // --- Define CSS Styles for PDF ---
+        const pdfStyles = `
+          body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            padding: 40px; /* Add padding for margins */
+            color: #333;
+            background-color: #ffffff; /* Ensure white background */
+          }
+          h1, h2, h3 {
+            margin-bottom: 0.75em;
+            margin-top: 1.5em;
+            color: #110927; /* Dark purple heading */
+            font-weight: 600;
+            page-break-after: avoid;
+          }
+          h1 {
+            font-size: 24px;
+            text-align: center;
+            border-bottom: 2px solid #130830; /* Darker purple border */
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+          }
+          h2 {
+            font-size: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+            margin-bottom: 20px;
+          }
+          h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+          }
+          p {
+            margin-bottom: 1em;
+          }
+          ul, ol {
+            margin-left: 20px;
+            margin-bottom: 1em;
+          }
+          li {
+            margin-bottom: 0.5em;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1.5em;
+            margin-bottom: 1.5em;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            page-break-inside: avoid;
+          }
+          th, td {
+            border: 1px solid #ddd;
+            padding: 10px 12px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 14px; /* Slightly smaller table font */
+          }
+          th {
+            background-color: #f2f2f2; /* Lighter grey header */
+            font-weight: bold;
+            color: #100926; /* Dark purple text */
+          }
+          tbody tr:nth-child(even) {
+            background-color: #f9f9f9; /* Subtle row striping */
+          }
+          pre { /* Style for code blocks if any */
+            background-color: #f5f5f5;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+          }
+          /* Add more styles as needed */
+        `;
+
+        // --- Wrap HTML with Styles ---
+        const fullHtml = `
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <title>Compliance Report</title>
+              <style>${pdfStyles}</style>
+          </head>
+          <body>
+              ${complianceReportHtml}
+          </body>
+          </html>
+        `;
+
         let pdfUrl = null;
         try {
             console.log(`Calling HTML to PDF API: ${HTML_TO_PDF_API_URL}`);
             const apiResponse = await fetch(HTML_TO_PDF_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ html: complianceReportHtml }),
+                body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
             });
 
             if (!apiResponse.ok) {
