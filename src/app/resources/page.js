@@ -90,7 +90,7 @@ export default function ResourcesPage() {
           <div className="grid md:grid-cols-4 gap-8">
             {/* Logo & Copyright */}
             <div>
-              <h3 className="text-lg font-bold text-white mb-2">Engineering Diagram Insights</h3>
+              <h3 className="text-lg font-bold text-white mb-2">Engineering Insights</h3>
               <p className="text-gray-400 text-sm">&copy; {new Date().getFullYear()}. All rights reserved.</p>
             </div>
             {/* Links 1 */}

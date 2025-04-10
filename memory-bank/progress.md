@@ -1,12 +1,13 @@
-# Progress: Engineering Diagram Insights
+# Progress: Engineering Insights
 
-**Date:** April 10, 2025 (Afternoon Update)
+**Date:** April 10, 2025 (Late Afternoon Update)
 
-**Current Status:** Implemented robust multi-file handling and error reporting for chat/reports. Replaced Puppeteer PDF generation with external API. Fixed guest auth for reports. Resolved layout/UI issues on landing/static pages.
+**Current Status:** Implemented default project creation for new users. Implemented robust multi-file handling and error reporting for chat/reports. Replaced Puppeteer PDF generation with external API. Fixed guest auth for reports. Resolved layout/UI issues on landing/static pages.
 
 **What Works:**
 -   **Core Setup:** Project structure, Memory Bank, basic pages (Auth, Upload), styling, DB schemas. Build process successful.
 -   **Authentication:** NextAuth integration, registration, login, logout, session management, page protection.
+-   **Onboarding:** If an authenticated user has no projects, a default project ("My First Project") is automatically created, and the user is redirected to it (`Sidebar.js`).
 -   **Layout & Navigation:**
     -   Reusable `Header` component created with conditional navigation (Public vs. Auth-Public vs. Auth-Private). Includes "Dashboard" link to first project for logged-in users on public pages.
     -   `Sidebar` component updated to render only on authenticated, non-public routes.
@@ -45,6 +46,7 @@
     -   Chat and Report APIs now attempt to load *all* project files from GCS before interacting with Gemini.
     -   Implemented "Fail Fast" on GCS download errors: If any file fails, the process stops with a user-friendly error message.
     -   Implemented robust error handling for Gemini API calls: Technical errors are logged server-side, and user-friendly messages are returned to the frontend (via stream or SSE).
+    -   **Chat API Rework:** Modified chat API to send *all* project files (`inlineData`) with *every* user message using `generateContentStream` to ensure consistent multi-file context for the AI model.
 -   **Git Configuration:** `.gitignore` updated.
 -   **MCP Server Setup:** Perplexity MCP server configured.
 

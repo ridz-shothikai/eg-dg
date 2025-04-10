@@ -16,7 +16,7 @@ export default function UseCasesPage() {
     <div className="min-h-screen bg-[#0c071a] text-gray-200 font-sans">
       {/* Main Content */}
       <main className="container mx-auto px-6 py-16">
-        <h1 className="text-4xl font-bold text-center text-white mb-16">Use Cases for Engineering Diagram Insights</h1>
+        <h1 className="text-4xl font-bold text-center text-white mb-16">Use Cases for Engineering Insights</h1>
 
         {/* Detailed Use Cases */}
         <div className="space-y-16">
@@ -118,7 +118,7 @@ export default function UseCasesPage() {
           <div className="grid md:grid-cols-4 gap-8">
             {/* Logo & Copyright */}
             <div>
-              <h3 className="text-lg font-bold text-white mb-2">Engineering Diagram Insights</h3>
+              <h3 className="text-lg font-bold text-white mb-2">Engineering Insights</h3>
               <p className="text-gray-400 text-sm">&copy; {new Date().getFullYear()}. All rights reserved.</p>
             </div>
             {/* Links 1 */}

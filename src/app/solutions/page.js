@@ -21,7 +21,7 @@ export default function SolutionsPage() {
         {/* Placeholder Content */}
         <div className="bg-[#100926] p-8 rounded-lg shadow-xl border border-[#130830] space-y-6">
           <p className="text-lg text-gray-300">
-            Engineering Diagram Insights offers tailored solutions to address the specific challenges faced by different engineering disciplines. Our AI-powered platform transforms how you interact with technical drawings, boosting efficiency and accuracy.
+            Engineering Insights offers tailored solutions to address the specific challenges faced by different engineering disciplines. Our AI-powered platform transforms how you interact with technical drawings, boosting efficiency and accuracy.
           </p>
 
           <div>
@@ -45,7 +45,7 @@ export default function SolutionsPage() {
           <div className="grid md:grid-cols-4 gap-8">
             {/* Logo & Copyright */}
             <div>
-              <h3 className="text-lg font-bold text-white mb-2">Engineering Diagram Insights</h3>
+              <h3 className="text-lg font-bold text-white mb-2">Engineering Insights</h3>
               <p className="text-gray-400 text-sm">&copy; {new Date().getFullYear()}. All rights reserved.</p>
             </div>
             {/* Links 1 */}

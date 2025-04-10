@@ -86,7 +86,7 @@ export default function SignupPage() {
       <div className="min-h-screen flex flex-grow items-center justify-center bg-gray-900 text-white">
         <div className="bg-[#100926] p-8 rounded-lg shadow-lg w-full max-w-md border border-[#130830]">
           {/* Update Title */}
-          <h1 className="text-2xl font-bold mb-6 text-center">Sign Up for Engineering Diagram Insights</h1>
+          <h1 className="text-2xl font-bold mb-6 text-center">Sign Up for Engineering Insights</h1>
           <form onSubmit={handleSubmit}>
             {error && <p className="mb-4 text-center text-red-500">{error}</p>}
             <div className="mb-4">

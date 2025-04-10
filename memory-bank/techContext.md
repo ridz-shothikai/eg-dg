@@ -1,4 +1,4 @@
-# Tech Context: Engineering Diagram Insights
+# Tech Context: Engineering Insights
 
 ## Core Technologies
 

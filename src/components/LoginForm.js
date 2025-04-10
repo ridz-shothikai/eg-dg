@@ -73,7 +73,7 @@ export default function LoginForm() {
 
   return (
     <div className="bg-[#100926] p-8 rounded-lg shadow-lg w-full max-w-md border border-[#130830]">
-      <h1 className="text-2xl font-bold mb-6 text-center">Engineering Diagram Insights <br/>Please Login</h1>
+      <h1 className="text-2xl font-bold mb-6 text-center">Engineering Insights <br/>Please Login</h1>
       <form onSubmit={handleSubmit}>
         {generalError && <p className="mb-4 text-center text-red-500">{generalError}</p>}
         <div className="mb-4">
@@ -120,10 +120,12 @@ export default function LoginForm() {
         </div>
       )}
       <div className="mt-6 text-center">
-        {/* Replaced Link with plain text */}
         <p className="text-sm text-gray-400">
           {/* eslint-disable-next-line react/no-unescaped-entities */}
-          Don't have an account? Contact with us
+          Don't have an account?{' '}
+          <Link href="/signup" className="text-indigo-400 hover:text-indigo-300 font-medium">
+            create new
+          </Link>
         </p>
       </div>
     </div>

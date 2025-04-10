@@ -4,7 +4,7 @@ import Header from "@/components/Header"; // Import the new Header component
 import "./globals.css";
 
 export const metadata = {
-  title: "Engineering Diagram Insights",
+  title: "Engineering Insights",
   description: "AI-Powered Engineering Diagram Analysis",
 };
 

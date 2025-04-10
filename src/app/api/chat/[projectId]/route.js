@@ -181,48 +181,40 @@ export async function POST(request, context) {
     // --- End File Preparation ---
 
 
-    // --- Format History for startChat ---
-    const formattedHistory = [];
+    // --- Construct Full Conversation History for Each Request ---
+    const contents = [];
+
+    // Add previous history turns (text only)
     if (history && history.length > 0) {
         history.forEach(item => {
-            formattedHistory.push({ role: item.role, parts: [{ text: item.text }] });
+            contents.push({ role: item.role, parts: [{ text: item.text }] });
         });
     }
 
-    // Construct the initial user message part, including context and file parts if it's the start of the conversation
-    const contextText = `Context: These diagrams (${processedDiagramNames.join(', ')}) are part of project "${project.name}". Now, please answer my question.`;
-    const initialUserParts = history && history.length > 0 ? [{ text: message }] : [...fileParts, { text: contextText }, { text: message }];
+    // Add the current user message WITH file parts and context text
+    const contextText = `Context: Use all the following diagrams (${processedDiagramNames.join(', ')}) which are part of project "${project.name}" to answer my question.`;
+    const currentUserParts = [
+        ...fileParts, // Include inlineData for all files
+        { text: contextText },
+        { text: message }
+    ];
+    contents.push({ role: "user", parts: currentUserParts });
 
-    // If history exists, add the current message. If not, the initialUserParts already contain the first message.
-    if (history && history.length > 0) {
-        formattedHistory.push({ role: "user", parts: [{ text: message }] });
-    } else {
-        // For a new chat, the history starts with the combined initial prompt
-         formattedHistory.push({ role: "user", parts: initialUserParts.filter(p => !p.inlineData) }); // History shouldn't contain file data itself
-         // The actual file data is sent in the *first* message only
-    }
+    // Log the structure being sent (optional, for debugging)
+    // console.log("Sending contents to Gemini:", JSON.stringify(contents.map(c => ({ role: c.role, parts: c.parts.map(p => p.text ? {text: '...'} : {inlineData: '...'}) })), null, 2));
 
 
-    console.log("Starting chat stream with Gemini 2.0 Flash...");
+    console.log("Starting chat stream with Gemini 2.0 Flash (sending files each time)...");
 
-    // --- Use Streaming ---
+    // --- Use Streaming with generateContentStream ALWAYS ---
     const encoder = new TextEncoder();
     let accumulatedResponse = ""; // To store the full response for DB saving
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          let resultStream;
-          if (history && history.length > 0) {
-              const chatSession = gemini.startChat({
-                  history: formattedHistory.slice(0, -1), // History before current message
-              });
-              // Use sendMessageStream for ongoing conversations
-              resultStream = await chatSession.sendMessageStream(message);
-          } else {
-              // Use generateContentStream for the first message (with files)
-              resultStream = await gemini.generateContentStream(initialUserParts);
-          }
+          // Always use generateContentStream with the full constructed 'contents'
+          const resultStream = await gemini.generateContentStream({ contents });
 
           // Process the stream from Gemini
           for await (const chunk of resultStream.stream) {
@@ -265,9 +257,9 @@ export async function POST(request, context) {
            }
            // Add more specific error checks as needed
 
-           // Try to send the user-friendly error message through the stream
+           // Try to send the user-friendly error message through the stream with a specific prefix
            try {
-                controller.enqueue(encoder.encode(`\n\n[ERROR: ${userFriendlyError}]`));
+                controller.enqueue(encoder.encode(`__CHAT_ERROR__:${userFriendlyError}`));
            } catch (e) { /* Ignore if controller is already closed */ }
            controller.close(); // Ensure stream is closed on error
            // Note: DB saving might not happen if an error occurs mid-stream

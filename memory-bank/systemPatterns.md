@@ -1,8 +1,8 @@
-# System Patterns: Engineering Diagram Insights
+# System Patterns: Engineering Insights
 
 ## Architecture Overview
 
-Engineering Diagram Insights employs a full-stack architecture using Next.js, leveraging server-side rendering (SSR) and API routes for backend functionality. It integrates several Google Cloud services for core features.
+Engineering Insights employs a full-stack architecture using Next.js, leveraging server-side rendering (SSR) and API routes for backend functionality. It integrates several Google Cloud services for core features.
 
 ```mermaid
 graph TD

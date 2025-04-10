@@ -143,23 +143,43 @@ export default function ChatInterface({
                 // Check if this specific message is the loading placeholder
                 const isLoadingPlaceholder = isModel && msg.text === '' && isChatLoading && index === chatHistory.length - 1;
 
+                // --- Check for and handle custom error prefix ---
+                let isErrorMessage = false;
+                let displayMessage = msg.text;
+                const errorPrefix = '__CHAT_ERROR__:';
+                if (isModel && msg.text.startsWith(errorPrefix)) {
+                  isErrorMessage = true;
+                  displayMessage = msg.text.substring(errorPrefix.length);
+                }
+                // --- End error prefix handling ---
+
+                // Determine bubble classes based on role and error status
+                const bubbleClasses = [
+                  'p-3', 'rounded-lg', 'max-w-lg', 'prose', 'prose-invert',
+                  isLoadingPlaceholder ? 'flex items-center justify-center' : '',
+                  msg.role === 'user' ? 'bg-indigo-600 text-white' : '',
+                  isModel && !isErrorMessage ? 'bg-gray-600 text-white' : '',
+                  isErrorMessage ? 'bg-red-900 bg-opacity-50 border border-red-700 text-red-200' : '' // Error styling
+                ].filter(Boolean).join(' '); // Filter out empty strings and join
+
                 return (
                   // Container for each message row (bubble + optional copy button)
                   <div key={index} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                     {/* Message Bubble */}
-                    <div className={`p-3 rounded-lg max-w-lg prose prose-invert ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-600 text-white'} ${isLoadingPlaceholder ? 'flex items-center justify-center' : ''}`}>
+                    <div className={bubbleClasses}>
                       {isLoadingPlaceholder ? (
                         <div className="w-3 h-3 bg-gray-400 rounded-full animate-zoom"></div>
                       ) : isModel ? (
-                        <ReactMarkdown>{msg.text}</ReactMarkdown>
+                        // Use displayMessage which has prefix removed if it was an error
+                        <ReactMarkdown>{displayMessage}</ReactMarkdown>
                       ) : (
-                        msg.text
+                        displayMessage // User messages just use displayMessage (which is same as msg.text)
                       )}
                     </div>
-                    {/* Add Copy button UNDER completed model messages */}
-                    {isModel && !isLoadingPlaceholder && msg.text && (
+                    {/* Add Copy button UNDER completed model messages (but not for errors) */}
+                    {isModel && !isLoadingPlaceholder && !isErrorMessage && msg.text && (
                       <button
-                        onClick={() => onCopy(msg.text, index)}
+                        onClick={() => onCopy(displayMessage, index)} // Copy the cleaned message
                         className="mt-1 p-1 rounded text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
                         title={copiedIndex === index ? "Copied!" : "Copy text"}
                       >

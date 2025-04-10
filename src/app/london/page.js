@@ -178,7 +178,7 @@ export default function LondonLandingPage() {
 
       {/* Footer (Optional) */}
       <footer className="bg-[#100926] p-4 mt-16 text-center text-gray-500 text-sm">
-        &copy; {new Date().getFullYear()} Engineering Diagram Insights. All rights reserved.
+        &copy; {new Date().getFullYear()} Engineering Insights. All rights reserved.
       </footer>
     </div>
   );

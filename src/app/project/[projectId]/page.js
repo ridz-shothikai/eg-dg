@@ -477,7 +477,7 @@ export default function ProjectDetailPage() {
                     <LoadingSpinner size="sm" text={null} /> {/* Restored text prop (as null) */}
                     <span>{reportStates.ocr.message || "Generating..."}</span>
                   </div>
-                ) : ( 'OCR Download' )}
+                ) : ( 'Detailed Overview Download' )}
               </button>
               {/* BoM Button */}
               <button

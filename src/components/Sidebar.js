@@ -20,6 +20,31 @@ export default function Sidebar() {
   const [isModalOpen, setIsModalOpen] = useState(false); // State for modal visibility
   const router = useRouter();
 
+  // Function to create default project and redirect
+  const createAndRedirectToDefaultProject = useCallback(async () => {
+    console.log("No projects found, creating default project...");
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'My First Project' }), // Default name
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create default project');
+      }
+      const newProject = await response.json();
+      console.log("Default project created:", newProject);
+      // Redirect to the new project page
+      router.push(`/project/${newProject._id}`);
+    } catch (err) {
+      console.error('Error creating default project:', err);
+      // Handle error appropriately - maybe show a message to the user?
+      // For now, just log it and the user will see "No projects yet"
+      setError('Could not create initial project.');
+    }
+  }, [router]); // Add router to dependency array
+
   // Define fetchProjects using useCallback to memoize it
   const fetchProjects = useCallback(async () => {
     if (status === 'authenticated') {
@@ -32,6 +57,13 @@ export default function Sidebar() {
         }
         const data = await response.json();
         setProjects(data.projects);
+
+        // If no projects are found, create a default one and redirect
+        if (data.projects.length === 0) {
+          // No need to await here, let it run in the background and redirect
+          createAndRedirectToDefaultProject();
+        }
+
       } catch (err) {
         console.error('Error fetching projects:', err);
         setError(err.message);
@@ -42,11 +74,15 @@ export default function Sidebar() {
       setLoading(false);
       setProjects([]);
     }
-  }, [status]);
+    // Add createAndRedirectToDefaultProject to dependency array
+  }, [status, createAndRedirectToDefaultProject]);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    // Only fetch projects if authenticated
+    if (status === 'authenticated') {
+        fetchProjects();
+    }
+  }, [status, fetchProjects]); // Add status here too
 
   const handleCreateProject = async (projectName, description) => {
     // This function is passed to the modal

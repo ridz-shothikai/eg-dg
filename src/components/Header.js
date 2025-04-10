@@ -66,7 +66,7 @@ export default function Header() {
         <Link href="/" legacyBehavior>
           <a className="text-xl font-bold text-white">
             <span className="inline-flex items-center">
-              <PlaceholderIcon className="w-5 h-5 mr-2"/> Engineering Diagram Insights
+              <PlaceholderIcon className="w-5 h-5 mr-2"/> Engineering Insights
             </span>
           </a>
         </Link>
