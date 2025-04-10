@@ -20,6 +20,7 @@ export default function NewProjectModal({ isOpen, onClose, onCreate }) {
       await onCreate(projectName, description);
       // onCreate should handle closing the modal on success
     } catch (err) {
+      console.log(err)
       setError(err.message || 'Failed to create project.');
     } finally {
       setIsCreating(false);

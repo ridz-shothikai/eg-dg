@@ -63,7 +63,10 @@ export default function Sidebar() {
       }
 
       const data = await response.json();
-      const newProjectId = data.project._id;
+
+      console.log("Found Project", data);
+
+      const newProjectId = data._id;
 
       await fetchProjects(); // Refetch projects
       setIsModalOpen(false); // Close modal on success
@@ -100,7 +103,7 @@ export default function Sidebar() {
         <Link href="/" className="mb-4">
           {/* Increased font size */}
           <span className="block text-center text-xl font-semibold p-2 rounded hover:bg-[#130830] cursor-pointer">
-            Eng Diagram Insight
+            Dashboard
           </span>
         </Link>
         <h2 className="text-xl font-semibold mb-4">Projects</h2>
