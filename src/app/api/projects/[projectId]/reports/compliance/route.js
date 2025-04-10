@@ -251,7 +251,7 @@ export async function GET(request, { params }) {
         // --- Step 1: Perform OCR ---
         const diagramNamesString = processedDiagramNames.join(', ');
         const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract text relevant to components, materials, dimensions, specifications, and safety notes.`;
-        sendSseMessage(controller, { status: 'Performing OCR...' });
+        sendSseMessage(controller, { status: 'Analyzing key Information...' });
         const ocrText = await callGemini(ocrPrompt, fileParts, true); // Relaxed safety
         if (!ocrText) throw new Error("OCR failed.");
         sendSseMessage(controller, { status: 'Text extraction complete.' });
@@ -289,7 +289,7 @@ ${ocrText}
 
 Generate the Compliance Report in HTML format now.`;
 
-        sendSseMessage(controller, { status: 'Analyzing compliance (HTML)...' });
+        sendSseMessage(controller, { status: 'Analyzing compliance...' });
         let complianceReportHtml = await callGemini(compliancePrompt, [], false); // Default safety
         if (!complianceReportHtml) throw new Error("Compliance analysis failed.");
 
@@ -308,7 +308,7 @@ Generate the Compliance Report in HTML format now.`;
         sendSseMessage(controller, { status: 'Compliance analysis complete.' });
 
         // --- Step 4: Convert HTML to PDF using External API ---
-        sendSseMessage(controller, { status: 'Applying styles and converting HTML to PDF via API...' }); // Updated status message
+        sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' }); // Updated status message
 
         // --- Define CSS Styles for PDF ---
         const pdfStyles = `

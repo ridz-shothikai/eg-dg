@@ -73,7 +73,7 @@ export default function LoginForm() {
 
   return (
     <div className="bg-[#100926] p-8 rounded-lg shadow-lg w-full max-w-md border border-[#130830]">
-      <h1 className="text-2xl font-bold mb-6 text-center">Engineering Diagram Insights - Login</h1>
+      <h1 className="text-2xl font-bold mb-6 text-center">Engineering Diagram Insights <br/>Please Login</h1>
       <form onSubmit={handleSubmit}>
         {generalError && <p className="mb-4 text-center text-red-500">{generalError}</p>}
         <div className="mb-4">

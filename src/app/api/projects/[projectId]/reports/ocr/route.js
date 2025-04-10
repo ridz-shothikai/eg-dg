@@ -243,7 +243,7 @@ export async function GET(request, { params }) {
         // --- Step 1: Perform OCR ---
         const diagramNamesString = processedDiagramNames.join(', ');
         const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract all text content accurately. Structure the output clearly, perhaps using markdown headings for each document if multiple are present.`;
-        sendSseMessage(controller, { status: 'Performing OCR...' });
+        sendSseMessage(controller, { status: 'Analyzing key Information...' });
         const ocrText = await callGemini(ocrPrompt, fileParts, true);
         if (!ocrText) throw new Error("OCR process returned empty text.");
         sendSseMessage(controller, { status: 'Text extraction complete.' });
@@ -270,7 +270,7 @@ ${ocrText}
 
 Generate the PDR report in HTML format now.`;
 
-        sendSseMessage(controller, { status: 'Generating report summary (HTML)...' });
+        sendSseMessage(controller, { status: 'Generating report summary ...' });
         let pdrReportHtml = await callGemini(pdrPrompt, [], false);
         if (!pdrReportHtml) throw new Error("PDR generation process returned empty HTML.");
 
@@ -289,7 +289,7 @@ Generate the PDR report in HTML format now.`;
         sendSseMessage(controller, { status: 'Report summary generated.' });
 
         // --- Step 3: Convert HTML to PDF using External API ---
-        sendSseMessage(controller, { status: 'Applying styles and converting HTML to PDF via API...' }); // Updated status message
+        sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' }); // Updated status message
 
         // --- Define CSS Styles for PDF ---
         const pdfStyles = `

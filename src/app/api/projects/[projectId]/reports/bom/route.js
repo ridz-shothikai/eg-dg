@@ -239,7 +239,7 @@ export async function GET(request, { params }) {
         // --- Step 1: Perform OCR ---
         const diagramNamesString = processedDiagramNames.join(', ');
         const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract all text content accurately. Focus on text relevant to components, materials, dimensions, and quantities.`;
-        sendSseMessage(controller, { status: 'Performing OCR...' });
+        sendSseMessage(controller, { status: 'Analyzing key Information...' });
         const ocrText = await callGemini(ocrPrompt, fileParts, true);
         if (!ocrText) throw new Error("OCR process returned empty text.");
         sendSseMessage(controller, { status: 'Text extraction complete.' });
@@ -266,7 +266,7 @@ ${ocrText}
 
 Generate the Bill of Materials report in HTML format now.`;
 
-        sendSseMessage(controller, { status: 'Generating Bill of Materials (HTML)...' });
+        sendSseMessage(controller, { status: 'Generating Bill of Materials ...' });
         let bomReportHtml = await callGemini(bomPrompt, [], false);
         if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML.");
 
@@ -285,7 +285,7 @@ Generate the Bill of Materials report in HTML format now.`;
         sendSseMessage(controller, { status: 'BoM generated.' });
 
         // --- Step 3: Convert HTML to PDF using External API ---
-        sendSseMessage(controller, { status: 'Applying styles and converting HTML to PDF via API...' }); // Updated status message
+        sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' }); // Updated status message
 
         // --- Define CSS Styles for PDF ---
         const pdfStyles = `
