@@ -1,10 +1,15 @@
 # Active Context: Layout Refactor & Guest Flow Implementation
 
-**Date:** April 10, 2025 (Late Afternoon Update 2)
+**Date:** April 10, 2025 (Late Afternoon Update 3)
 
-**Status:** Reworked chat API to send all files with every request to improve multi-file context. Implemented default project creation for new users. Implemented robust multi-file handling and error reporting for chat and report generation APIs. Ensured all project files are loaded before Gemini interaction, or the process fails clearly. Added user-friendly error messages for GCS download failures and Gemini API errors.
+**Status:** Added specific identity response instruction to chat AI prompt. Reworked chat API to send all files with every request to improve multi-file context. Implemented default project creation for new users. Implemented robust multi-file handling and error reporting for chat and report generation APIs. Ensured all project files are loaded before Gemini interaction, or the process fails clearly. Added user-friendly error messages for GCS download failures and Gemini API errors.
 
-**Recent Activity (April 10 - Late Afternoon Update 2):**
+**Recent Activity (April 10 - Late Afternoon Update 3):**
+- **Chat AI Identity Response:**
+    - Modified Chat API (`/api/chat/[projectId]/route.js`).
+    - Updated the `contextText` sent to the Gemini model to include a specific instruction: If asked about its identity, creator, or LLM, the AI must respond *only* with "I am Designed to analyse the Engineering Document and Analyze them . and i am created by Shothik AI".
+
+**Previous Activity (April 10 - Late Afternoon Update 2):**
 - **Chat Multi-File Context Enhancement:**
     - Modified Chat API (`/api/chat/[projectId]/route.js`) to address Gemini potentially losing context of multiple files.
     - Changed strategy: Instead of using `startChat` and `sendMessageStream`, the API now uses `generateContentStream` for *every* user message.

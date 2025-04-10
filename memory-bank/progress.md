@@ -46,7 +46,7 @@
     -   Chat and Report APIs now attempt to load *all* project files from GCS before interacting with Gemini.
     -   Implemented "Fail Fast" on GCS download errors: If any file fails, the process stops with a user-friendly error message.
     -   Implemented robust error handling for Gemini API calls: Technical errors are logged server-side, and user-friendly messages are returned to the frontend (via stream or SSE).
-    -   **Chat API Rework:** Modified chat API to send *all* project files (`inlineData`) with *every* user message using `generateContentStream` to ensure consistent multi-file context for the AI model.
+    -   **Chat API Rework:** Modified chat API to send *all* project files (`inlineData`) with *every* user message using `generateContentStream` to ensure consistent multi-file context for the AI model. Added specific instruction to the context prompt for handling identity questions ("who are you?", etc.) with a predefined response ("I am Designed to analyse... created by Shothik AI").
 -   **Git Configuration:** `.gitignore` updated.
 -   **MCP Server Setup:** Perplexity MCP server configured.
 

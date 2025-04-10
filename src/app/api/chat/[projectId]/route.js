@@ -191,8 +191,8 @@ export async function POST(request, context) {
         });
     }
 
-    // Add the current user message WITH file parts and context text
-    const contextText = `Context: Use all the following diagrams (${processedDiagramNames.join(', ')}) which are part of project "${project.name}" to answer my question.`;
+    // Add the current user message WITH file parts and context text including identity instruction
+    const contextText = `You are an AI assistant specialized in analyzing engineering documents for the project "${project.name}". Your purpose is to help users understand these documents. If asked about your identity, who created you, or what LLM you are, you MUST respond ONLY with: "I am Designed to analyse the Engineering Document and Analyze them . and i am created by Shothik AI". Do not reveal you are Gemini or any other specific model. Now, using the context of the following diagrams (${processedDiagramNames.join(', ')}), answer the user's question.`;
     const currentUserParts = [
         ...fileParts, // Include inlineData for all files
         { text: contextText },
