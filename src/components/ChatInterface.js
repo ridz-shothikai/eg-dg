@@ -247,7 +247,7 @@ export default function ChatInterface({
       )}
       {preparationStatus === 'no_files' && (
          <div className="flex-grow flex items-center justify-center">
-            <p className="text-gray-400 text-center">Upload diagrams to enable contextual chat.</p>
+            <p className="text-gray-400 text-center">Upload Document to enable contextual chat.</p>
          </div>
       )}
 

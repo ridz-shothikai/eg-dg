@@ -220,7 +220,7 @@ export async function GET(request, { params }) {
         const diagrams = await Diagram.find({ project: projectId, storagePath: { $exists: true, $ne: null, $ne: '' } }).select('fileName storagePath');
         if (diagrams.length === 0) throw new Error("No documents found.");
 
-        // --- Prepare Inline Data by Downloading Directly from GCS ---
+        // --- Prepare Inline Data by Downloading Directly from GCS (Fail Fast) ---
         sendSseMessage(controller, { status: `Preparing ${diagrams.length} files from GCS...` });
         const fileParts = [];
         const processedDiagramNames = [];
@@ -237,32 +237,45 @@ export async function GET(request, { params }) {
                 processedDiagramNames.push(diag.fileName);
                 sendSseMessage(controller, { status: `Prepared ${diag.fileName}.` });
             } catch (downloadError) {
-                 console.error(`Compliance SSE: Failed to download GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
-                 sendSseMessage(controller, { status: `Skipping ${diag.fileName} (download failed)...` });
+                 console.error(`Compliance SSE: FATAL ERROR downloading GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
+                 // Fail Fast: Send error via SSE and throw to stop execution
+                 const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
+                 sendSseMessage(controller, { message: userMessage }, 'error');
+                 throw new Error(userMessage); // Stop the stream processing
             }
         }
 
-        if (fileParts.length === 0) {
-             throw new Error("Could not prepare any documents from GCS.");
+        // Check if *any* files were processed (redundant with fail-fast, but safe)
+        if (fileParts.length !== diagrams.length) {
+             const errMsg = `Mismatch in prepared files. Expected ${diagrams.length}, got ${fileParts.length}.`;
+             console.error("Compliance SSE:", errMsg);
+             sendSseMessage(controller, { message: "An inconsistency occurred while preparing documents." }, 'error');
+             throw new Error(errMsg);
         }
         sendSseMessage(controller, { status: `Using ${fileParts.length} downloaded files.` });
         // --- End File Preparation ---
 
-        // --- Step 1: Perform OCR ---
-        const diagramNamesString = processedDiagramNames.join(', ');
-        const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract text relevant to components, materials, dimensions, specifications, and safety notes.`;
-        sendSseMessage(controller, { status: 'Analyzing key Information...' });
-        const ocrText = await callGemini(ocrPrompt, fileParts, true); // Relaxed safety
-        if (!ocrText) throw new Error("OCR failed.");
-        sendSseMessage(controller, { status: 'Text extraction complete.' });
+        // Declare variables needed across steps
+        let ocrText = '';
+        let complianceReportHtml = '';
 
-        // --- Step 2: Load Compliance Rules ---
-        sendSseMessage(controller, { status: 'Loading compliance rules...' });
-        const complianceRulesText = await loadComplianceRules();
-        if (complianceRulesText.startsWith("Error:")) throw new Error(complianceRulesText);
+        // --- Step 1 & 3 Combined Try Block for Gemini Calls ---
+        try {
+            // --- Step 1: Perform OCR ---
+            const diagramNamesString = processedDiagramNames.join(', ');
+            const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract text relevant to components, materials, dimensions, specifications, and safety notes.`;
+            sendSseMessage(controller, { status: 'Analyzing key Information...' });
+            ocrText = await callGemini(ocrPrompt, fileParts, true); // Relaxed safety
+            if (!ocrText) throw new Error("OCR process returned empty text.");
+            sendSseMessage(controller, { status: 'Text extraction complete.' });
 
-        // --- Step 3: Generate Compliance Report as HTML ---
-        const compliancePrompt = `Analyze the following OCR text extracted from engineering diagrams (Project: ${project.name}) against the provided compliance rules (IBC, Eurocodes, IS) and generate a Compliance Report in **HTML format**.
+            // --- Step 2: Load Compliance Rules ---
+            sendSseMessage(controller, { status: 'Loading compliance rules...' });
+            const complianceRulesText = await loadComplianceRules();
+            if (complianceRulesText.startsWith("Error:")) throw new Error(complianceRulesText); // Propagate rule loading error
+
+            // --- Step 3: Generate Compliance Report as HTML ---
+            const compliancePrompt = `Analyze the following OCR text extracted from engineering diagrams (Project: ${project.name}) against the provided compliance rules (IBC, Eurocodes, IS) and generate a Compliance Report in **HTML format**.
 
 **Instructions for HTML Structure:**
 1.  Use standard HTML tags: \`<h1>\`, \`<h2>\`, \`<h3>\` for headings, \`<p>\` for paragraphs, \`<ul>\`/\`<ol>\`/\`<li>\` for lists.
@@ -289,11 +302,31 @@ ${ocrText}
 
 Generate the Compliance Report in HTML format now.`;
 
-        sendSseMessage(controller, { status: 'Analyzing compliance...' });
-        let complianceReportHtml = await callGemini(compliancePrompt, [], false); // Default safety
-        if (!complianceReportHtml) throw new Error("Compliance analysis failed.");
+            sendSseMessage(controller, { status: 'Analyzing compliance...' });
+            complianceReportHtml = await callGemini(compliancePrompt, [], false); // Default safety
+            if (!complianceReportHtml) throw new Error("Compliance analysis failed.");
+            sendSseMessage(controller, { status: 'Compliance analysis complete.' });
 
-        // --- Clean up Gemini's Markdown code fences ---
+        } catch (geminiError) { // Catch errors from either OCR or Compliance generation
+            console.error("Compliance SSE: Error during Gemini processing (OCR or Compliance):", geminiError);
+            let userFriendlyError = "An unexpected error occurred during analysis. Please try again.";
+            // Determine if it was OCR or Compliance step if possible (less critical now)
+            if (geminiError.message && geminiError.message.includes("SAFETY")) {
+                userFriendlyError = "Analysis could not be completed due to content safety guidelines.";
+            } else if (geminiError.message && (geminiError.message.includes("Invalid content") || geminiError.message.includes("unsupported format"))) {
+                userFriendlyError = "There was an issue processing one or more files for analysis. Please check the file formats.";
+            } else if (geminiError.message && geminiError.message.includes("RESOURCE_EXHAUSTED")) {
+                userFriendlyError = "The analysis service is busy. Please try again shortly.";
+            } else if (geminiError.message === "OCR process returned empty text.") {
+                 userFriendlyError = "Failed to extract text from the documents (OCR). Please check the files.";
+            } else if (geminiError.message === "Compliance analysis failed.") {
+                 userFriendlyError = "Failed to generate the compliance analysis based on the extracted text.";
+            }
+            sendSseMessage(controller, { message: userFriendlyError }, 'error');
+            throw geminiError; // Re-throw to be caught by the main try...catch...finally
+        }
+
+        // --- Clean up Gemini's Markdown code fences (applied to complianceReportHtml) ---
         console.log("Cleaning Gemini HTML output...");
         complianceReportHtml = complianceReportHtml.trim();
         if (complianceReportHtml.startsWith('```html')) {
@@ -437,9 +470,13 @@ Generate the Compliance Report in HTML format now.`;
         sendSseMessage(controller, { public_url: pdfUrl }, 'complete'); // Use public_url as requested
         console.log(`Compliance SSE stream complete for project ${projectId}. Sent public URL: ${pdfUrl}`);
 
-      } catch (error) {
+      } catch (error) { // This is the main catch block for the stream start
         console.error(`Compliance SSE Error for project ${projectId}:`, error);
-        try { sendSseMessage(controller, { message: error.message || 'Internal error during compliance report generation.' }, 'error'); }
+        // Use the user-friendly message if it was generated by our specific handlers, otherwise use a generic one
+        const finalErrorMessage = error.message.startsWith('Failed to load required file') || error.message.includes('analysis service') || error.message.includes('content safety') || error.message.includes('processing one or more files')
+            ? error.message
+            : 'An internal error occurred during compliance report generation.';
+        try { sendSseMessage(controller, { message: finalErrorMessage }, 'error'); }
         catch (sseError) { console.error("Compliance SSE Error: Failed to send error message:", sseError); }
       } finally {
         try { controller.close(); console.log(`Compliance SSE stream closed for project ${projectId}`); }

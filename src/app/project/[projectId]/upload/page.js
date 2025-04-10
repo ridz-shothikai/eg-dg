@@ -34,7 +34,7 @@ export default function ProjectUploadPage() {
               <span className="text-indigo-400 hover:text-indigo-300">&larr; Back to Project</span>
             </Link>
           </div>
-          <h1 className="text-3xl font-bold mb-6 text-center">Upload Diagram to Project</h1>
+          <h1 className="text-3xl font-bold mb-6 text-center">Upload Document to Project</h1>
           <p className="text-center text-gray-400 mb-4">Project ID: {projectId}</p>
           <FileUpload projectId={projectId} /> {/* Pass projectId */}
           {/* The "Start Upload" button is part of FileUpload now */}

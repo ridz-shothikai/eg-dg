@@ -437,7 +437,7 @@ export default function ProjectDetailPage() {
           <h2 className="text-xl font-semibold mb-3 text-white">Project Files</h2>
           <Link href={`/project/${projectId}/upload`}>
             <button className="w-full mb-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded">
-              + Upload Diagram
+              + Upload Document
             </button>
           </Link>
           {diagrams.length > 0 ? (

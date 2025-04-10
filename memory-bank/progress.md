@@ -1,8 +1,8 @@
 # Progress: Engineering Diagram Insights
 
-**Date:** April 9, 2025 (Evening Update)
+**Date:** April 10, 2025 (Afternoon Update)
 
-**Current Status:** Replaced Puppeteer PDF generation with external API. Fixed guest auth for reports. Resolved layout/UI issues on landing/static pages.
+**Current Status:** Implemented robust multi-file handling and error reporting for chat/reports. Replaced Puppeteer PDF generation with external API. Fixed guest auth for reports. Resolved layout/UI issues on landing/static pages.
 
 **What Works:**
 -   **Core Setup:** Project structure, Memory Bank, basic pages (Auth, Upload), styling, DB schemas. Build process successful.
@@ -41,6 +41,10 @@
     -   Custom scrollbar styling (thin, rounded, custom colors) (`ChatInterface.js`).
     -   Adjusted chat history container height (`ChatInterface.js`).
 -   **Report Generation (OCR/PDR, BoM, Compliance):** SSE implementation, Gemini analysis, HTML cleanup, **External API PDF generation**, guest access support (via query param), professional PDF styling via embedded CSS.
+-   **Multi-File Handling & Error Reporting:**
+    -   Chat and Report APIs now attempt to load *all* project files from GCS before interacting with Gemini.
+    -   Implemented "Fail Fast" on GCS download errors: If any file fails, the process stops with a user-friendly error message.
+    -   Implemented robust error handling for Gemini API calls: Technical errors are logged server-side, and user-friendly messages are returned to the frontend (via stream or SSE).
 -   **Git Configuration:** `.gitignore` updated.
 -   **MCP Server Setup:** Perplexity MCP server configured.
 
@@ -62,7 +66,6 @@
     -   Implement Knowledge Hub search functionality.
     -   Implement Admin Panel functionalities.
 -   **Deployment:** CI/CD setup, Deployment Preparation.
--   **(Lower Priority):** Full multiple file upload handling.
 -   **(Decision):** Clarify if Google Vision OCR is still needed or if Gemini OCR suffices.
 -   **(External):** Consider if temporary report files from external API need cleanup (depends on API behavior).
 

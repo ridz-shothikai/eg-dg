@@ -125,27 +125,34 @@ export async function POST(request, context) {
         return NextResponse.json({ message: "No documents found for this project to chat with." }, { status: 503 });
     }
 
-    // --- Prepare File Parts by Downloading Directly from GCS ---
+    // --- Prepare File Parts by Downloading Directly from GCS (Fail Fast) ---
     console.log(`Chat API: Preparing ${diagrams.length} files for project ${projectId} from GCS...`);
     const fileParts = [];
     const processedDiagramNames = [];
     // Need GCS storage client initialized earlier
     if (!storage || !GCS_BUCKET_NAME) {
-        return NextResponse.json({ message: 'Chat functionality is disabled (GCS not initialized)' }, { status: 503 });
+        // Use a user-friendly message
+        console.error("Chat API: GCS Storage client not initialized or bucket name missing.");
+        return NextResponse.json({ message: 'Chat functionality is disabled due to a configuration issue. Please contact support.' }, { status: 503 });
     }
 
-
     for (const diag of diagrams) {
+
+      console.log(diag);
+
         const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
         const objectPath = diag.storagePath.startsWith(gcsPrefix)
             ? diag.storagePath.substring(gcsPrefix.length)
             : diag.storagePath;
 
         try {
+            // Add "Start Load" log
+            console.log(`Chat API: Start Load ${diag.fileName} to model`);
             console.log(` -> Downloading GCS file for chat context: ${objectPath}`);
-            // Download file content directly into a buffer
             const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
             const base64Data = fileBuffer.toString('base64');
+            // Add "Loaded" log
+            console.log(`Chat API: ${diag.fileName} loaded in the model`);
 
             fileParts.push({
                 inlineData: {
@@ -157,15 +164,18 @@ export async function POST(request, context) {
             console.log(` -> SUCCESS: Prepared inlineData for ${diag.fileName} from GCS.`);
 
         } catch (downloadError) {
-            console.error(` -> ERROR: Failed to download GCS file ${objectPath} (${diag.fileName}) for chat:`, downloadError.message);
-            // Continue to next file, but don't add this one. Crucial for chat to proceed if possible.
+            console.error(` -> FATAL ERROR: Failed to download GCS file ${objectPath} (${diag.fileName}) for chat:`, downloadError.message);
+            // Fail Fast: Return a user-friendly error immediately
+            const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
+            return NextResponse.json({ message: userMessage }, { status: 500 }); // Use 500 for internal processing error
         }
     }
 
-    if (fileParts.length === 0) {
-         console.error(`Chat API: Could not prepare any files from GCS for project ${projectId}.`);
-         // Inform user that files might be missing or inaccessible
-         return NextResponse.json({ message: "Could not access documents for chat. Please ensure they are uploaded correctly." }, { status: 503 });
+    // Check if *any* files were processed (this check might be redundant now due to fail-fast, but keep as safeguard)
+    if (fileParts.length !== diagrams.length) {
+         console.error(`Chat API: Mismatch in prepared files. Expected ${diagrams.length}, got ${fileParts.length}. This shouldn't happen with fail-fast.`);
+         // Inform user about the inconsistency
+         return NextResponse.json({ message: "An inconsistency occurred while preparing documents for chat. Please try again." }, { status: 500 });
     }
     console.log(`...Chat file preparation complete. Using ${fileParts.length} files from GCS.`);
     // --- End File Preparation ---
@@ -239,12 +249,27 @@ export async function POST(request, context) {
 
           controller.close(); // Close the stream when Gemini is done
         } catch (streamError) {
+           // --- Robust Gemini Error Handling ---
            console.error("Error during Gemini stream processing:", streamError);
-           // Try to send an error message through the stream if possible, or just close
+           let userFriendlyError = "An unexpected error occurred during analysis. Please try again."; // Default message
+
+           // Add specific checks based on potential Gemini errors
+           if (streamError.message && streamError.message.includes("RESOURCE_EXHAUSTED")) {
+               userFriendlyError = "The analysis service is currently busy. Please try again shortly.";
+           } else if (streamError.message && streamError.message.includes("API key not valid")) {
+               userFriendlyError = "Chat functionality is temporarily unavailable due to a configuration issue. Please contact support.";
+           } else if (streamError.message && (streamError.message.includes("Invalid content") || streamError.message.includes("unsupported format"))) {
+               userFriendlyError = "There was an issue processing one or more uploaded files. Please check the file formats or try uploading again.";
+           } else if (streamError.message && streamError.message.includes("SAFETY")) { // Check for safety blocks
+                userFriendlyError = "The request could not be completed due to content safety guidelines.";
+           }
+           // Add more specific error checks as needed
+
+           // Try to send the user-friendly error message through the stream
            try {
-                controller.enqueue(encoder.encode(`\n\n[ERROR: ${streamError.message}]`));
+                controller.enqueue(encoder.encode(`\n\n[ERROR: ${userFriendlyError}]`));
            } catch (e) { /* Ignore if controller is already closed */ }
-           controller.close();
+           controller.close(); // Ensure stream is closed on error
            // Note: DB saving might not happen if an error occurs mid-stream
         }
       }
@@ -259,8 +284,12 @@ export async function POST(request, context) {
     });
 
   } catch (error) {
-    console.error(`Chat API error for project ${projectId}:`, error);
-    const errorMessage = error.message || 'Failed to get chat response';
-    return NextResponse.json({ message: errorMessage, error: error.toString() }, { status: 500 });
+    // Catch errors outside the stream start (e.g., initial setup, auth)
+    console.error(`Chat API error for project ${projectId} (outside stream):`, error);
+    // Provide a generic user-friendly message for non-stream errors
+    const userMessage = error.message.startsWith('Failed to load required file') // Check if it's our custom GCS error
+        ? error.message
+        : 'An unexpected error occurred before starting the chat. Please try again.';
+    return NextResponse.json({ message: userMessage }, { status: 500 });
   }
 }

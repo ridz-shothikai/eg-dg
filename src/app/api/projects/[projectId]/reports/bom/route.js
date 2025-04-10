@@ -208,7 +208,7 @@ export async function GET(request, { params }) {
             throw new Error("No documents with storage paths found.");
         }
 
-        // --- Prepare Inline Data by Downloading Directly from GCS ---
+        // --- Prepare Inline Data by Downloading Directly from GCS (Fail Fast) ---
         sendSseMessage(controller, { status: `Preparing ${diagrams.length} files from GCS...` });
         const fileParts = [];
         const processedDiagramNames = [];
@@ -225,27 +225,51 @@ export async function GET(request, { params }) {
                 processedDiagramNames.push(diag.fileName);
                 sendSseMessage(controller, { status: `Prepared ${diag.fileName}.` });
             } catch (downloadError) {
-                 console.error(`BoM SSE: Failed to download GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
-                 sendSseMessage(controller, { status: `Skipping ${diag.fileName} (download failed)...` });
+                 console.error(`BoM SSE: FATAL ERROR downloading GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
+                 // Fail Fast: Send error via SSE and throw to stop execution
+                 const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
+                 sendSseMessage(controller, { message: userMessage }, 'error');
+                 throw new Error(userMessage); // Stop the stream processing
             }
         }
 
-        if (fileParts.length === 0) {
-             throw new Error("Could not prepare any documents from GCS.");
+        // Check if *any* files were processed (redundant with fail-fast, but safe)
+        if (fileParts.length !== diagrams.length) {
+             const errMsg = `Mismatch in prepared files. Expected ${diagrams.length}, got ${fileParts.length}.`;
+             console.error("BoM SSE:", errMsg);
+             sendSseMessage(controller, { message: "An inconsistency occurred while preparing documents." }, 'error');
+             throw new Error(errMsg);
         }
         sendSseMessage(controller, { status: `Using ${fileParts.length} downloaded files.` });
         // --- End File Preparation ---
 
-        // --- Step 1: Perform OCR ---
-        const diagramNamesString = processedDiagramNames.join(', ');
-        const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract all text content accurately. Focus on text relevant to components, materials, dimensions, and quantities.`;
-        sendSseMessage(controller, { status: 'Analyzing key Information...' });
-        const ocrText = await callGemini(ocrPrompt, fileParts, true);
-        if (!ocrText) throw new Error("OCR process returned empty text.");
-        sendSseMessage(controller, { status: 'Text extraction complete.' });
+        let ocrText = '';
+        // --- Step 1: Perform OCR with Error Handling ---
+        try {
+            const diagramNamesString = processedDiagramNames.join(', ');
+            const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract all text content accurately. Focus on text relevant to components, materials, dimensions, and quantities.`;
+            sendSseMessage(controller, { status: 'Analyzing key Information...' });
+            ocrText = await callGemini(ocrPrompt, fileParts, true); // Apply safety settings for OCR
+            if (!ocrText) throw new Error("OCR process returned empty text.");
+            sendSseMessage(controller, { status: 'Text extraction complete.' });
+        } catch (ocrError) {
+            console.error("BoM SSE: Error during Gemini OCR call:", ocrError);
+            let userFriendlyError = "An unexpected error occurred during text extraction (OCR). Please try again.";
+            if (ocrError.message && ocrError.message.includes("SAFETY")) {
+                userFriendlyError = "Text extraction could not be completed due to content safety guidelines.";
+            } else if (ocrError.message && (ocrError.message.includes("Invalid content") || ocrError.message.includes("unsupported format"))) {
+                userFriendlyError = "There was an issue processing one or more files for text extraction. Please check the file formats.";
+            } else if (ocrError.message && ocrError.message.includes("RESOURCE_EXHAUSTED")) {
+                userFriendlyError = "The analysis service is busy during text extraction. Please try again shortly.";
+            }
+            sendSseMessage(controller, { message: userFriendlyError }, 'error');
+            throw ocrError; // Stop processing
+        }
 
-        // --- Step 2: Generate BoM Report as HTML ---
-        const bomPrompt = `Based on the following OCR text extracted from engineering diagrams (Project: ${project.name}), generate a detailed Bill of Materials (BoM) in **HTML format**.
+        let bomReportHtml = '';
+        // --- Step 2: Generate BoM Report as HTML with Error Handling ---
+        try {
+            const bomPrompt = `Based on the following OCR text extracted from engineering diagrams (Project: ${project.name}), generate a detailed Bill of Materials (BoM) in **HTML format**.
 
 **Instructions for HTML Structure:**
 1.  Present the BoM primarily as an HTML table (\`<table>\`) with a clear header row (\`<thead>\` containing \`<th>\` elements) and data rows (\`<tbody>\` containing \`<tr>\` with \`<td>\` elements).
@@ -266,9 +290,21 @@ ${ocrText}
 
 Generate the Bill of Materials report in HTML format now.`;
 
-        sendSseMessage(controller, { status: 'Generating Bill of Materials ...' });
-        let bomReportHtml = await callGemini(bomPrompt, [], false);
-        if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML.");
+            sendSseMessage(controller, { status: 'Generating Bill of Materials ...' });
+            bomReportHtml = await callGemini(bomPrompt, [], false); // No files needed here, no special safety settings
+            if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML.");
+
+        } catch (bomError) {
+            console.error("BoM SSE: Error during Gemini BoM generation call:", bomError);
+            let userFriendlyError = "An unexpected error occurred while generating the Bill of Materials. Please try again.";
+             if (bomError.message && bomError.message.includes("SAFETY")) {
+                userFriendlyError = "Bill of Materials generation could not be completed due to content safety guidelines.";
+            } else if (bomError.message && bomError.message.includes("RESOURCE_EXHAUSTED")) {
+                userFriendlyError = "The analysis service is busy during BoM generation. Please try again shortly.";
+            }
+            sendSseMessage(controller, { message: userFriendlyError }, 'error');
+            throw bomError; // Stop processing
+        }
 
         // --- Clean up Gemini's Markdown code fences ---
         console.log("Cleaning Gemini HTML output...");

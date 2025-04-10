@@ -1,10 +1,26 @@
 # Active Context: Layout Refactor & Guest Flow Implementation
 
-**Date:** April 9, 2025 (Evening Update)
+**Date:** April 10, 2025 (Afternoon Update)
 
-**Status:** Replaced Puppeteer PDF generation with external API for reports. Fixed guest user authorization for report downloads. Resolved various layout issues on static pages and landing page. Adjusted landing page upload UI styling.
+**Status:** Implemented robust multi-file handling and error reporting for chat and report generation APIs. Ensured all project files are loaded before Gemini interaction, or the process fails clearly. Added user-friendly error messages for GCS download failures and Gemini API errors.
 
-**Recent Activity (April 9 - Evening):**
+**Recent Activity (April 10 - Afternoon):**
+- **Multi-File & Error Handling Implementation:**
+    - Modified Chat API (`/api/chat/[projectId]/route.js`):
+        - Implemented "Fail Fast" logic for GCS file downloads. If any file fails, the chat request stops with a specific user-friendly error.
+        - Added `try...catch` around Gemini stream processing (`generateContentStream`, `sendMessageStream`) to map technical errors (e.g., safety blocks, resource exhaustion, invalid content) to user-friendly messages sent via the stream.
+    - Modified BoM Report API (`/api/projects/[projectId]/reports/bom/route.js`):
+        - Implemented "Fail Fast" logic for GCS file downloads. If any file fails, the SSE stream sends an error event and stops.
+        - Added `try...catch` around Gemini calls (`callGemini` for OCR and BoM generation) to map technical errors to user-friendly messages sent via SSE.
+    - Modified Compliance Report API (`/api/projects/[projectId]/reports/compliance/route.js`):
+        - Implemented "Fail Fast" logic for GCS file downloads. If any file fails, the SSE stream sends an error event and stops.
+        - Added `try...catch` around Gemini calls (`callGemini` for OCR and compliance analysis) to map technical errors to user-friendly messages sent via SSE.
+    - Modified OCR/PDR Report API (`/api/projects/[projectId]/reports/ocr/route.js`):
+        - Implemented "Fail Fast" logic for GCS file downloads. If any file fails, the SSE stream sends an error event and stops.
+        - Added `try...catch` around Gemini calls (`callGemini` for OCR and PDR generation) to map technical errors to user-friendly messages sent via SSE.
+
+**Previous Activity (April 9 - Evening):**
+- **Report Generation Refactor:**
 - **Report Generation Refactor:**
     - Modified BoM, Compliance, and OCR/PDR API routes (`/api/projects/[projectId]/reports/...`) to remove Puppeteer dependency.
     - Implemented calls to external HTML-to-PDF API (`https://html-text-to-pdf.shothik.ai/convert`) in report routes.
