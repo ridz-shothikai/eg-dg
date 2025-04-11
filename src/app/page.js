@@ -125,7 +125,8 @@ export default function HomePage() {
       // Short delay before redirect
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      router.push(`/project/${projectId}`);
+      // Updated router push to use /dashboard prefix
+      router.push(`/dashboard/project/${projectId}`);
     } catch (error) {
       console.error('Guest upload process failed:', error);
       setUploadError(error.message || 'An unexpected error occurred during the upload process.');

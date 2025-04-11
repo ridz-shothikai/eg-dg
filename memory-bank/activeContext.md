@@ -1,8 +1,31 @@
 # Active Context: Reliability & UI Polish
 
-**Date:** April 11, 2025 (Mid-Morning)
+**Date:** April 11, 2025 (Afternoon)
 
-**Status:** Implemented retry logic for external API calls (Gemini, PDF conversion). Fixed dashboard background color inconsistency. Previous guest upload enhancements and fixes remain.
+**Status:** Separated dashboard layout from main site layout. Implemented functional dashboard header with user dropdown. Added file download links, serial numbers, and text wrapping to file list. Fixed chat scrollbar styling. Restored public page header visibility. Previous API retry logic and guest upload enhancements remain functional.
+
+**Recent Activity (April 11 - Afternoon):**
+- **Dashboard Layout Separation:**
+    - Created `src/app/dashboard` directory.
+    - Moved project pages (`src/app/project/*`) to `src/app/dashboard/project/*`. URLs now use `/dashboard/project/...`.
+    - Created dedicated dashboard layout `src/app/dashboard/layout.js` with persistent `Sidebar` and new `DashboardHeader`.
+    - Simplified root layout `src/app/layout.js`, removing conditional Header/Sidebar.
+    - Updated links/redirects in `page.js`, `Sidebar.js`, `Header.js`, `upload/page.js` to use `/dashboard/project/...` paths.
+- **Dashboard Header Implementation:**
+    - Created `src/components/DashboardHeader.js`.
+    - Implemented user dropdown menu (using `useSession`, `useState`, `useRef`) triggered by user icon/name.
+    - Dropdown includes placeholder "Profile" link and functional "Logout" button (`signOut`).
+    - Integrated `<DashboardHeader />` into `src/app/dashboard/layout.js`.
+- **Dashboard File List Enhancements:**
+    - Modified `src/app/dashboard/project/[projectId]/page.js`:
+        - Added serial numbers (index + 1) to each file item.
+        - Added download icon (`ArrowDownTrayIcon`) linked to `diagram.gcsUrl` with `download` attribute.
+        - Removed `truncate` class and added `break-words` to filename `<p>` tag to enable text wrapping.
+        - Reordered left column sections: Upload Button -> Reports -> File List.
+        - Made file list container scrollable independently (`max-h-80`, `overflow-y-auto`).
+- **UI Fixes:**
+    - Added custom scrollbar CSS rules to `src/app/globals.css` to style WebKit scrollbars (fixing white bar in chat).
+    - Modified `src/components/Header.js` to return `null` if `pathname` starts with `/dashboard`, restoring header visibility on public pages while keeping it hidden on dashboard pages.
 
 **Recent Activity (April 11 - Mid-Morning):**
 - **API Call Retry Mechanism:**
@@ -101,19 +124,17 @@
 - **Dependency Updates & Docker:** Updated major dependencies. Simplified Docker setup.
 
 **Current Focus:**
-- Testing API retry mechanisms under simulated failure conditions (if possible).
-- Verifying dashboard background consistency.
-- Confirming filename visibility improvement.
-- Testing guest multi-file upload functionality and progress bar display.
-- Verifying the guest file sync fix.
-- Confirming no regressions were introduced by recent changes.
+- Verify dashboard layout separation and new header functionality.
+- Test file list enhancements (serial numbers, download links, text wrapping, scrolling).
+- Test header visibility on public vs. dashboard pages.
+- Confirm chat scrollbar styling.
+- Test API retry mechanisms.
+- Test guest multi-file upload flow and redirects to `/dashboard/...`.
+- Test report generation (auth/guest).
 
 **Next Steps:**
-1.  Thorough testing of API retry logic (Gemini, PDF, Uploads).
-2.  Verify dashboard background fix across different screen sizes/content lengths.
-3.  Thoroughly test the guest multi-file upload flow.
-4.  Verify the guest file sync now works without 401 errors after upload.
-5.  Test report generation for authenticated and guest users (check for retry messages if errors occur).
-6.  Test layout consistency across all static pages.
-7.  Begin populating content for the `/solutions`, `/how-it-works`, `/use-cases`, and `/resources` pages.
-8.  Replace placeholder assets (logo, icons) when available.
+1.  Refine dashboard UI/UX (e.g., header content, sidebar styling, card styling for sections).
+2.  Implement profile page functionality (or remove placeholder link).
+3.  Begin populating content for static pages (`/solutions`, etc.).
+4.  Replace placeholder assets (logo, icons).
+5.  Implement mobile responsiveness for header/navigation.

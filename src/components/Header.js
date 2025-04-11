@@ -27,6 +27,7 @@ export default function Header() {
   const isAuthenticated = status === 'authenticated';
   const isPublicRoute = publicRoutes.includes(pathname);
   const isAuthRoute = authRoutes.includes(pathname);
+  const isDashboardRoute = pathname.startsWith('/dashboard'); // Check if it's a dashboard route
 
   // Fetch first project ID only if authenticated and on a public route
   useEffect(() => {
@@ -57,7 +58,14 @@ export default function Header() {
     return null;
   }
 
-  const dashboardLink = firstProjectId ? `/project/${firstProjectId}` : '/'; // Fallback to home if no projects
+  // --- NEW: Don't render header on dashboard routes ---
+  if (isDashboardRoute) {
+    return null;
+  }
+  // --- End New Check ---
+
+  // Updated dashboardLink to use /dashboard prefix
+  const dashboardLink = firstProjectId ? `/dashboard/project/${firstProjectId}` : '/'; // Fallback to home if no projects
 
   return (
     <header className="sticky top-0 z-50 bg-[#100926] shadow-md">

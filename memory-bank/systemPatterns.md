@@ -76,23 +76,25 @@ graph TD
 11. **Version Comparison:** (Assumed requires login) The backend compares metadata/visuals of two diagram versions.
 12. **Knowledge Hub:** (Assumed requires login) Leverages MongoDB search to query historical project data.
 
-## Application Structure (Layout & Pages)
+## Application Structure (Layout & Pages) - Updated April 11
 
--   **Layout (`src/app/layout.js`):** Wraps all pages. Includes `<AuthProvider>`, `<Header>`, and `<Sidebar>`. The outermost `div` uses `flex h-screen bg-gray-900` to ensure a full-height dark background. Contains a wrapper `div` (`flex-grow flex flex-col`) holding the `Header` and the main content area (`<main>`). The `<main>` element uses `flex-grow overflow-y-auto`.
--   **Header Component (`src/components/Header.js`):** Client component. Renders conditionally based on route and auth status. Shows full nav for unauthenticated users, simplified nav + Dashboard link for authenticated users on public routes, and minimal nav (Logo, User/Logout) for authenticated users on private routes. Fetches first project ID for Dashboard link.
--   **Sidebar Component (`src/components/Sidebar.js`):** Client component. Renders project list and navigation *only* if user is authenticated AND not on a public/auth route.
--   **Public Pages:**
-    1.  **`/` (Landing Page):** Main marketing page, includes Hero section with guest upload, Features, Workflow, Use Cases, FAQ. Relies on Layout for Header.
-    2.  **`/solutions`:** Details on solutions offered (Placeholder). Relies on Layout for Header.
-    3.  **`/how-it-works`:** Detailed explanation of the platform workflow. Relies on Layout for Header.
-    4.  **`/use-cases`:** Examples for different engineering disciplines. Relies on Layout for Header.
-    5.  **`/resources`:** Links to blog, docs, case studies. Relies on Layout for Header.
--   **Auth Pages:**
-    6.  **`/login` / `/signup`:** Authentication forms. Header is not rendered on these pages.
--   **Private Pages (Require Auth or Guest Auth):**
-    7.  **`/project/[projectId]` (Dashboard):** Main project workspace. Displays diagrams, chat interface, report generation options. Handles both authenticated and guest access (via `X-Guest-ID` header and `localStorage`). Shows guest banner if applicable. Relies on Layout for Header (simplified view) and Sidebar.
-    8.  **`/project/[projectId]/upload`:** Authenticated file upload interface. Relies on Layout for Header (simplified view) and Sidebar.
--   **(Future/TBD):** Diagram Viewer, BoM Page, Compliance Page, Version Comparison Page, Knowledge Hub Interface, Admin/Settings.
+-   **Root Layout (`src/app/layout.js`):** Wraps all pages. Includes only `<AuthProvider>` and basic `<html>`/`<body>` structure. The main `<Header>` component is included here but handles its own visibility.
+-   **Dashboard Layout (`src/app/dashboard/layout.js`):** Wraps all pages under the `/dashboard` route. Defines the persistent dashboard structure:
+    -   Includes `<Sidebar>` component (fixed width, left).
+    -   Includes `<DashboardHeader>` component (top bar within main area).
+    -   Provides the main content area (`<main>`) for nested pages.
+-   **Header Component (`src/components/Header.js`):** Client component rendered by the root layout. **Hides itself** if the current `pathname` starts with `/dashboard` or matches auth routes (`/login`, `/signup`). Shows full public navigation or login/signup buttons otherwise. Fetches first project ID for the "Dashboard" link (points to `/dashboard/project/[id]`).
+-   **DashboardHeader Component (`src/components/DashboardHeader.js`):** Client component rendered by the dashboard layout. Contains dashboard-specific elements, including a user dropdown menu with profile/logout options.
+-   **Sidebar Component (`src/components/Sidebar.js`):** Client component rendered by the dashboard layout. Displays project list (links point to `/dashboard/project/[id]`) and navigation. Includes logic for creating a default project if none exist (redirects to `/dashboard/project/[id]`).
+-   **Public Pages (Use Root Layout + Header):**
+    1.  **`/` (Landing Page):** Main marketing page, includes Hero section with guest upload (redirects to `/dashboard/project/[id]`), Features, Workflow, Use Cases, FAQ.
+    2.  **`/solutions`, `/how-it-works`, `/use-cases`, `/resources`:** Placeholder static pages.
+-   **Auth Pages (Use Root Layout, Header hides itself):**
+    3.  **`/login` / `/signup`:** Authentication forms.
+-   **Dashboard Pages (Use Dashboard Layout):**
+    4.  **`/dashboard/project/[projectId]`:** Main project workspace. Displays diagrams (with serial numbers, download links, wrapped text), chat interface, report generation options. Handles guest access.
+    5.  **`/dashboard/project/[projectId]/upload`:** Authenticated file upload interface.
+-   **(Future/TBD):** Diagram Viewer, BoM Page, Compliance Page, Version Comparison Page, Knowledge Hub Interface, Admin/Settings (likely under `/dashboard`).
 
 ## Design Considerations
 

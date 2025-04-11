@@ -35,8 +35,8 @@ export default function Sidebar() {
       }
       const newProject = await response.json();
       console.log("Default project created:", newProject);
-      // Redirect to the new project page
-      router.push(`/project/${newProject._id}`);
+      // Redirect to the new project page - UPDATED PATH
+      router.push(`/dashboard/project/${newProject._id}`);
     } catch (err) {
       console.error('Error creating default project:', err);
       // Handle error appropriately - maybe show a message to the user?
@@ -106,7 +106,8 @@ export default function Sidebar() {
 
       await fetchProjects(); // Refetch projects
       setIsModalOpen(false); // Close modal on success
-      router.push(`/project/${newProjectId}/upload`); // Redirect
+      // Redirect to the new project upload page - UPDATED PATH
+      router.push(`/dashboard/project/${newProjectId}/upload`);
 
     } catch (err) {
       console.error('Error creating project:', err);
@@ -157,8 +158,8 @@ export default function Sidebar() {
             {projects.length > 0 ? (
               projects.map((project) => (
                 <li key={project._id} className="mb-2">
-                  {/* Link to the project detail page */}
-                  <Link href={`/project/${project._id}`}>
+                  {/* Link to the project detail page - UPDATED PATH */}
+                  <Link href={`/dashboard/project/${project._id}`}>
                     <span className="block p-2 rounded hover:bg-[#130830] cursor-pointer">
                       {project.name}
                     </span>
