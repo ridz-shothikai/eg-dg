@@ -34,10 +34,10 @@ export default function ProjectUploadPage() {
               <span className="text-indigo-400 hover:text-indigo-300">&larr; Back to Project</span>
             </Link>
           </div>
-          <h1 className="text-3xl font-bold mb-6 text-center">Upload Document to Project</h1>
+          <h1 className="text-3xl font-bold mb-6 text-center">Upload Documents to Project</h1>
           <p className="text-center text-gray-400 mb-4">Project ID: {projectId}</p>
+          {/* Pass multiple=true to FileUpload component if needed, or handle within FileUpload */}
           <FileUpload projectId={projectId} /> {/* Pass projectId */}
-          {/* The "Start Upload" button is part of FileUpload now */}
         </div>
       </div>
     );
