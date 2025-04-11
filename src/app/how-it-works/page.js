@@ -1,5 +1,6 @@
 import React from 'react';
-import Link from 'next/link'; // Import Link for navigation
+import Link from 'next/link';
+import Image from 'next/image'; // Import the Next.js Image component
 
 // Placeholder Icon (can be reused or replaced)
 const PlaceholderIcon = ({ className = "w-6 h-6" }) => (
@@ -33,15 +34,29 @@ export default function HowItWorksPage() {
                 Once uploaded, your file is securely stored, and our system immediately begins the analysis process.
               </p>
             </div>
-            <div className="bg-[#100926] p-6 rounded-lg border border-[#130830] aspect-video flex items-center justify-center text-gray-500">
-              [Visual Placeholder: Upload Interface Mockup]
+            {/* Replace Placeholder with Image */}
+            <div className="bg-[#100926] p-6 rounded-lg border border-[#130830] flex items-center justify-center">
+              <Image
+                src="/how-it-works/upload.png"
+                alt="Upload interface showing drag and drop area"
+                width={350} // Reduced width
+                height={180} // Reduced height (maintaining aspect ratio)
+                className="rounded-md object-contain" // Style as needed
+              />
             </div>
           </div>
 
           {/* Step 2: Analyze & Ask */}
           <div className="grid md:grid-cols-2 gap-8 items-center">
-            <div className="bg-[#100926] p-6 rounded-lg border border-[#130830] aspect-video flex items-center justify-center text-gray-500 md:order-last">
-              [Visual Placeholder: Chat Interface Mockup]
+            {/* Replace Placeholder with Image */}
+            <div className="bg-[#100926] p-6 rounded-lg border border-[#130830] flex items-center justify-center md:order-last">
+              <Image
+                src="/how-it-works/chat.png"
+                alt="Chat interface showing interaction with a diagram"
+                width={500} // Reduced width
+                height={333} // Reduced height
+                className="rounded-md object-contain"
+              />
             </div>
             <div>
               <div className="bg-[#130830] rounded-full w-16 h-16 flex items-center justify-center mb-4 text-white font-bold text-2xl">2</div>
@@ -76,8 +91,15 @@ export default function HowItWorksPage() {
                 Export extracted data and reports in various formats (CSV, PDF, JSON) for seamless integration into your existing workflows.
               </p>
             </div>
-            <div className="bg-[#100926] p-6 rounded-lg border border-[#130830] aspect-video flex items-center justify-center text-gray-500">
-              [Visual Placeholder: Report Generation Mockup]
+             {/* Replace Placeholder with Image */}
+            <div className="bg-[#100926] p-6 rounded-lg border border-[#130830] flex items-center justify-center">
+               <Image
+                src="/how-it-works/export.png"
+                alt="Example report or data export view"
+                width={500} // Reduced width
+                height={333} // Reduced height
+                className="rounded-md object-contain"
+              />
             </div>
           </div>
 

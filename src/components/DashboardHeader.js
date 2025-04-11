@@ -44,10 +44,11 @@ export default function DashboardHeader() {
         {/* <h1 className="text-xl font-semibold text-white">Project Name</h1> */}
       </div>
 
-      {/* Right side - User Dropdown */}
-      <div className="relative" ref={dropdownRef}>
-        <button
-          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+      {/* Right side - User Dropdown (Only show if authenticated) */}
+      {status === 'authenticated' && (
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           className="flex items-center space-x-2 text-white hover:bg-gray-600 p-2 rounded transition-colors"
         >
           <UserCircleIcon className="w-6 h-6" />
@@ -72,9 +73,16 @@ export default function DashboardHeader() {
               <ArrowLeftOnRectangleIcon className="w-4 h-4 mr-2" />
               Logout
             </button>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
+      {/* Placeholder for Login/Signup if needed for guests? Or handled by banner? */}
+      {status === 'unauthenticated' && (
+        <div>
+          {/* Optionally add Login/Signup links here if needed, though the banner might suffice */}
+        </div>
+      )}
     </header>
   );
 }

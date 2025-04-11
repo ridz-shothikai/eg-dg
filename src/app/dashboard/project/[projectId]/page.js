@@ -433,9 +433,8 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Left Column */}
-      {/* Added pt-10 if guest mode to avoid banner overlap AND added bg-gray-900 */}
-      {/* Removed outer overflow-y-auto as inner sections will scroll */}
-      <div className={`w-full md:w-1/3 lg:w-1/4 p-4 border-r border-gray-700 flex flex-col space-y-6 bg-gray-900 ${isGuestMode ? 'pt-12' : ''}`}>
+      {/* Removed conditional padding pt-12 - now handled by layout */}
+      <div className={`w-full md:w-1/3 lg:w-1/4 p-4 border-r border-gray-700 flex flex-col space-y-6 bg-gray-900`}>
 
         {/* --- REORDERED SECTIONS --- */}
 
@@ -551,8 +550,8 @@ export default function ProjectDetailPage() {
 
 
       {/* Right Column: Chat Interface - Use flex-grow to allow ChatInterface to fill height */}
-      {/* Added bg-gray-900 to match left column */}
-      <div ref={chatContainerRef} className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col bg-gray-900 ${isGuestMode ? 'pt-12' : ''}`}>
+      {/* Removed conditional padding pt-12 - now handled by layout */}
+      <div ref={chatContainerRef} className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col bg-gray-900`}>
          {/* Ensure heading is white */}
         <h2 className="text-2xl font-semibold mb-4 text-white flex-shrink-0">Chat for Insights</h2>
         {/* Render ChatInterface component and pass props */}

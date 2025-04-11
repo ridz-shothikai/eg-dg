@@ -6,6 +6,14 @@ import { useSession, signOut } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation'; // Import usePathname
 import NewProjectModal from './NewProjectModal';
 
+// Placeholder Icon (assuming it's defined elsewhere or we add it)
+const PlaceholderIcon = ({ className = "w-6 h-6" }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+  </svg>
+);
+
+
 // List of public routes where the sidebar should NOT be shown
 const publicRoutes = ['/', '/solutions', '/how-it-works', '/use-cases', '/resources'];
 // Auth routes are also public in terms of layout
@@ -132,18 +140,36 @@ export default function Sidebar() {
     return null;
   }
 
+  // --- Get current project ID and name ---
+  let currentProjectId = null;
+  let currentProjectName = 'Dashboard'; // Default title
+  const projectPathMatch = pathname.match(/^\/dashboard\/project\/([a-zA-Z0-9]+)/);
+  if (projectPathMatch) {
+    currentProjectId = projectPathMatch[1];
+    const currentProject = projects.find(p => p._id === currentProjectId);
+    if (currentProject) {
+      currentProjectName = currentProject.name;
+    }
+  }
+  // --- End get current project ---
+
+
   // Render sidebar only if authenticated AND on a private route
   return (
     <React.Fragment>
       <div className="w-64 h-screen bg-[#100926] text-white p-4 flex flex-col border-r border-[#130830]">
-        {/* Dashboard Link */}
-        <Link href="/" className="mb-4">
-          {/* Increased font size */}
-          <span className="block text-center text-xl font-semibold p-2 rounded hover:bg-[#130830] cursor-pointer">
-            Dashboard
-          </span>
+        {/* Logo and Current Project Name */}
+        <Link href={"/"} className="mb-4 block p-2 rounded hover:bg-[#130830]">
+          <div className="flex items-center space-x-2">
+             <PlaceholderIcon className="w-5 h-5 flex-shrink-0"/>
+             <span className="text-lg font-semibold truncate" title={currentProjectName}>
+               {/* {currentProjectName} */}
+               Engineering Insights
+             </span>
+          </div>
         </Link>
-        <h2 className="text-xl font-semibold mb-4">Projects</h2>
+
+        <h2 className="text-lg font-semibold mb-2 mt-2">Projects</h2> {/* Adjusted margin/size */}
         <button
           onClick={() => setIsModalOpen(true)} // Open the modal
           className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded mb-4"

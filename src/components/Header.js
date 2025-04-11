@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // Added useRef
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
+import { UserCircleIcon, ArrowLeftOnRectangleIcon, ChevronDownIcon } from '@heroicons/react/24/outline'; // Added icons
 
 // Placeholder Icon (same as used in pages)
 const PlaceholderIcon = ({ className = "w-6 h-6" }) => (
@@ -23,6 +24,8 @@ export default function Header() {
   const pathname = usePathname();
   const [firstProjectId, setFirstProjectId] = useState(null);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false); // State for dropdown
+  const dropdownRef = useRef(null); // Ref for dropdown
 
   const isAuthenticated = status === 'authenticated';
   const isPublicRoute = publicRoutes.includes(pathname);
@@ -51,6 +54,19 @@ export default function Header() {
         setFirstProjectId(null);
     }
   }, [isAuthenticated, isPublicRoute, firstProjectId, isLoadingProjects]);
+
+  // Close dropdown if clicked outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [dropdownRef]);
 
 
   // Don't render header on auth pages (login/signup)
@@ -100,9 +116,43 @@ export default function Header() {
                     <a className="text-gray-300 hover:text-white">Dashboard</a>
                  </Link>
               )}
-               {/* Placeholder for User Menu/Logout */}
-               <div className="text-gray-300">{session.user.name || session.user.email}</div>
-               <button onClick={() => signOut({ callbackUrl: '/' })} className="text-gray-300 hover:text-white">Logout</button>
+              {/* User Dropdown Menu */}
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="flex items-center space-x-1 text-gray-300 hover:text-white p-1 rounded transition-colors"
+                >
+                  <UserCircleIcon className="w-6 h-6" />
+                  {/* Optional: Show name on larger screens if desired */}
+                  {/* <span className="hidden lg:inline">{session.user.name || session.user.email}</span> */}
+                  <ChevronDownIcon className={`w-4 h-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-700">
+                    {/* Display Name/Email */}
+                    <div className="px-4 py-2 text-sm text-gray-400 border-b border-gray-700">
+                      Signed in as <br/>
+                      <strong className="text-gray-200">{session.user.name || session.user.email}</strong>
+                    </div>
+                    {/* Profile Link */}
+                    <Link href="/dashboard/profile">
+                      <span className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600 hover:text-white cursor-pointer">
+                        Profile
+                      </span>
+                    </Link>
+                    {/* Logout Item */}
+                    <button
+                      onClick={() => signOut({ callbackUrl: '/' })}
+                      className="w-full text-left flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-600 hover:text-red-300"
+                    >
+                      <ArrowLeftOnRectangleIcon className="w-4 h-4 mr-2" />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <>
