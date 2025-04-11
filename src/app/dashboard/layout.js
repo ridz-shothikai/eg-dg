@@ -17,8 +17,10 @@ export default function DashboardLayout({ children }) {
 
       {/* Main Content Area Wrapper - Added relative positioning */}
       <div className="flex-grow flex flex-col overflow-hidden relative">
-        {/* Use the new DashboardHeader component */}
-        <DashboardHeader /> {/* Assuming this has a fixed height, e.g., h-16 */}
+        {/* Use the new DashboardHeader component - Added z-10 to ensure it's above main */}
+        <div className="relative z-10"> {/* Added wrapper for z-index */}
+           <DashboardHeader /> {/* Assuming this has a fixed height, e.g., h-16 */}
+        </div>
 
         {/* Page Content - Fills space below header and scrolls */}
         {/* Added absolute, inset-0, pt-16 (adjust if header height changes), overflow-y-auto */}

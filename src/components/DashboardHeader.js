@@ -58,9 +58,9 @@ export default function DashboardHeader() {
         {/* Dropdown Menu */}
         {isDropdownOpen && (
           <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-700">
-            {/* Profile Item (Placeholder Link) */}
-            <Link href="#">
-              <span className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600 hover:text-white cursor-not-allowed" title="Profile page not yet implemented">
+            {/* Profile Item - Updated Link */}
+            <Link href="/dashboard/profile">
+              <span className="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-600 hover:text-white cursor-pointer">
                 Profile
               </span>
             </Link>

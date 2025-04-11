@@ -508,10 +508,14 @@ export default function ProjectDetailPage() {
           {diagrams.length > 0 ? (
             <ul className="space-y-2">
               {/* Added index to map for serial number */}
-              {diagrams.map((diagram, index) => (
-                // Added relative positioning for absolute positioned elements inside
-                <li key={diagram._id} className="bg-gray-700 p-3 rounded relative flex justify-between items-start">
-                  {/* Serial Number (Top-Left) */}
+              {diagrams.map((diagram, index) => {
+                // --- TEMPORARY DEBUGGING: Log diagram object ---
+                console.log(`Rendering Diagram ${index + 1}:`, diagram);
+                // --- END DEBUGGING ---
+                return (
+                  // Added relative positioning for absolute positioned elements inside
+                  <li key={diagram._id} className="bg-gray-700 p-3 rounded relative flex justify-between items-start">
+                      {/* Serial Number (Top-Left) */}
                   <span className="absolute top-1 left-1 text-xs font-mono text-gray-400 bg-gray-800 px-1 rounded-sm">
                     {index + 1}
                   </span>
@@ -521,7 +525,7 @@ export default function ProjectDetailPage() {
                     <p className="font-medium text-sm mb-1 text-white break-words" title={diagram.fileName}>{diagram.fileName}</p> {/* Added break-words for safety */}
                     <p className="text-xs text-gray-400">{new Date(diagram.createdAt).toLocaleDateString()}</p>
                   </div>
-                  {/* Download Icon (Top-Right) */}
+                  {/* Download Icon (Top-Right) - Ensuring this section is present */}
                   {diagram.gcsUrl && ( // Only show if URL exists
                     <a
                       href={diagram.gcsUrl}
@@ -534,8 +538,9 @@ export default function ProjectDetailPage() {
                       <ArrowDownTrayIcon className="w-5 h-5" />
                     </a>
                   )}
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="text-gray-400 text-sm">No diagrams uploaded yet.</p>
