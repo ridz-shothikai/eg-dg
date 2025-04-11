@@ -13,8 +13,8 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <AuthProvider>
-          {/* Removed bg-gray-900 text-white from here, moved to individual page/component bases */}
-          <div className="flex h-screen"> {/* Removed base theme classes */}
+          {/* Add bg-gray-900 to ensure full screen dark background */}
+          <div className="flex h-screen bg-gray-900">
             {/* Sidebar renders conditionally based on route/auth status */}
             <Sidebar />
             {/* Main content area takes remaining space - Removed w-full */}

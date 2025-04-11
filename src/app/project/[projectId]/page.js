@@ -418,7 +418,8 @@ export default function ProjectDetailPage() {
 
   return (
     // Reverted: Removed h-full. Relying on flex-grow from layout.
-    <div className="flex flex-col md:flex-row relative flex-grow"> {/* Removed h-full */}
+    // Added bg-gray-900 to the main container to ensure consistent background
+    <div className="flex flex-col md:flex-row relative flex-grow bg-gray-900">
        {/* Guest Mode Banner */}
        {isGuestMode && (
         <div className="absolute top-0 left-0 right-0 bg-yellow-600 text-black text-center p-2 text-sm z-10">
@@ -431,10 +432,11 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Left Column */}
-      {/* Added pt-10 if guest mode to avoid banner overlap */}
-      <div className={`w-full md:w-1/3 lg:w-1/4 p-4 border-r border-gray-700 flex flex-col space-y-6 overflow-y-auto ${isGuestMode ? 'pt-12' : ''}`}>
+      {/* Added pt-10 if guest mode to avoid banner overlap AND added bg-gray-900 */}
+      <div className={`w-full md:w-1/3 lg:w-1/4 p-4 border-r border-gray-700 flex flex-col space-y-6 overflow-y-auto bg-gray-900 ${isGuestMode ? 'pt-12' : ''}`}>
         {/* Project Files Section */}
         <div>
+          {/* Ensure heading is white */}
           <h2 className="text-xl font-semibold mb-3 text-white">Project Files</h2>
           <Link href={`/project/${projectId}/upload`}>
             <button className="w-full mb-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded">
@@ -460,6 +462,7 @@ export default function ProjectDetailPage() {
         {/* Project Reports Section */}
         {diagrams.length > 0 && (
           <div>
+             {/* Ensure heading is white */}
             <h2 className="text-xl font-semibold mb-3 text-white">Project Reports</h2>
             {/* Display general report error if any specific report has an error */}
             {(reportStates.ocr.error || reportStates.bom.error || reportStates.compliance.error) &&
@@ -513,7 +516,9 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Right Column: Chat Interface - Use flex-grow to allow ChatInterface to fill height */}
-      <div ref={chatContainerRef} className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col ${isGuestMode ? 'pt-12' : ''}`}>
+      {/* Added bg-gray-900 to match left column */}
+      <div ref={chatContainerRef} className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col bg-gray-900 ${isGuestMode ? 'pt-12' : ''}`}>
+         {/* Ensure heading is white */}
         <h2 className="text-2xl font-semibold mb-4 text-white flex-shrink-0">Chat for Insights</h2>
         {/* Render ChatInterface component and pass props */}
         <ChatInterface

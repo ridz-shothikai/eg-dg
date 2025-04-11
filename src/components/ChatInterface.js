@@ -97,11 +97,13 @@ export default function ChatInterface({
 
   return (
     // Main chat container - takes remaining space, flex column, relative for loading overlay
-    <div style={{ height:"70vh" }} className="flex-grow bg-gray-800 rounded-lg shadow p-4 flex flex-col relative" >
+    // Changed bg-gray-800 to bg-gray-900 for consistency
+    <div style={{ height:"70vh" }} className="flex-grow bg-gray-900 rounded-lg shadow p-4 flex flex-col relative" >
 
       {/* Loading Spinner Overlay */}
       {(preparationStatus === 'loading' || preparationStatus === 'processing') && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-80 z-10 rounded-lg">
+        // Adjusted overlay background to match main container
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-80 z-10 rounded-lg">
           <LoadingSpinner text={preparationStatus === 'loading' ? "Preparing documents for chat..." : "Documents are processing, please wait..."} />
         </div>
       )}

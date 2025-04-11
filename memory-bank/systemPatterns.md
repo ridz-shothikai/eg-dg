@@ -78,7 +78,7 @@ graph TD
 
 ## Application Structure (Layout & Pages)
 
--   **Layout (`src/app/layout.js`):** Wraps all pages. Includes `<AuthProvider>`, `<Header>`, and `<Sidebar>`. Contains a main wrapper `div` (`flex-grow flex flex-col w-full`) holding the `Header` and the main content area (`<main>`). The `<main>` element uses `flex-grow overflow-y-auto`.
+-   **Layout (`src/app/layout.js`):** Wraps all pages. Includes `<AuthProvider>`, `<Header>`, and `<Sidebar>`. The outermost `div` uses `flex h-screen bg-gray-900` to ensure a full-height dark background. Contains a wrapper `div` (`flex-grow flex flex-col`) holding the `Header` and the main content area (`<main>`). The `<main>` element uses `flex-grow overflow-y-auto`.
 -   **Header Component (`src/components/Header.js`):** Client component. Renders conditionally based on route and auth status. Shows full nav for unauthenticated users, simplified nav + Dashboard link for authenticated users on public routes, and minimal nav (Logo, User/Logout) for authenticated users on private routes. Fetches first project ID for Dashboard link.
 -   **Sidebar Component (`src/components/Sidebar.js`):** Client component. Renders project list and navigation *only* if user is authenticated AND not on a public/auth route.
 -   **Public Pages:**

@@ -1,10 +1,30 @@
-# Active Context: Guest Upload Enhancements & Fixes
+# Active Context: Reliability & UI Polish
 
-**Date:** April 11, 2025 (Morning)
+**Date:** April 11, 2025 (Mid-Morning)
 
-**Status:** Fixed guest authorization for file sync API. Implemented multi-file upload for guests on the landing page with a detailed progress bar. Reviewed and decided against increasing report detail/length for now.
+**Status:** Implemented retry logic for external API calls (Gemini, PDF conversion). Fixed dashboard background color inconsistency. Previous guest upload enhancements and fixes remain.
 
-**Recent Activity (April 11 - Morning):**
+**Recent Activity (April 11 - Mid-Morning):**
+- **API Call Retry Mechanism:**
+    - Created reusable `fetchWithRetry` helper in `src/lib/fetchUtils.js` for general fetch calls.
+    - Created `generateContentWithRetry` and `generateContentStreamWithRetry` helpers in `src/lib/geminiUtils.js` for Gemini API calls.
+    - Integrated `fetchWithRetry` into landing page (`src/app/page.js`) for project creation and file uploads.
+    - Integrated `fetchWithRetry` into report routes (`bom`, `ocr`, `compliance`) for HTML-to-PDF API calls.
+    - Integrated Gemini retry helpers (`generateContent...`) into report routes (`bom`, `ocr`, `compliance`), chat route (`chat`), upload route (`upload`), and prepare route (`prepare`).
+    - Added SSE messages in report routes to indicate retry attempts.
+- **Dashboard UI Fix:**
+    - Applied consistent dark background (`bg-gray-900`) to the main container in `src/app/layout.js` and the content columns in `src/app/project/[projectId]/page.js`.
+    - Adjusted `ChatInterface.js` background to match (`bg-gray-900`).
+    - Fixed minor syntax errors introduced during previous edits.
+- **Project File List UI:**
+    - Changed filename text color to white (`text-white`) in `src/app/project/[projectId]/page.js` for better visibility.
+- **Dependency Installation:**
+    - Installed `@heroicons/react` package via npm to fix build error in `FileUpload.js`.
+- **NEXTAUTH_URL Configuration:**
+    - Updated `.env` file with `NEXTAUTH_URL=http://163.172.181.252:3001`.
+    - Updated `Dockerfile` to accept `NEXTAUTH_URL` as build `ARG` and set it as `ENV`.
+
+**Previous Activity (April 11 - Morning):**
 - **Guest Multi-File Upload & Progress Bar:**
     - Modified landing page (`src/app/page.js`) file input to accept multiple files (`multiple` attribute).
     - Updated `handleGuestUpload` function in `src/app/page.js` to:
@@ -81,14 +101,19 @@
 - **Dependency Updates & Docker:** Updated major dependencies. Simplified Docker setup.
 
 **Current Focus:**
+- Testing API retry mechanisms under simulated failure conditions (if possible).
+- Verifying dashboard background consistency.
+- Confirming filename visibility improvement.
 - Testing guest multi-file upload functionality and progress bar display.
-- Verifying the guest file sync fix by observing network requests or logs after guest upload/redirect.
+- Verifying the guest file sync fix.
 - Confirming no regressions were introduced by recent changes.
 
 **Next Steps:**
-1.  Thoroughly test the guest multi-file upload flow.
-2.  Verify the guest file sync now works without 401 errors after upload.
-3.  Test report generation for authenticated and guest users (no changes made, but good to re-verify).
-4.  Test layout consistency across all static pages.
-5.  Begin populating content for the `/solutions`, `/how-it-works`, `/use-cases`, and `/resources` pages.
-6.  Replace placeholder assets (logo, icons) when available.
+1.  Thorough testing of API retry logic (Gemini, PDF, Uploads).
+2.  Verify dashboard background fix across different screen sizes/content lengths.
+3.  Thoroughly test the guest multi-file upload flow.
+4.  Verify the guest file sync now works without 401 errors after upload.
+5.  Test report generation for authenticated and guest users (check for retry messages if errors occur).
+6.  Test layout consistency across all static pages.
+7.  Begin populating content for the `/solutions`, `/how-it-works`, `/use-cases`, and `/resources` pages.
+8.  Replace placeholder assets (logo, icons) when available.
