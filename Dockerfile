@@ -19,6 +19,12 @@ WORKDIR /app
 # Set NODE_ENV to production for the runtime environment
 ENV NODE_ENV=production
 
+# Add ARG for NEXTAUTH_URL (can be overridden during build)
+ARG NEXTAUTH_URL=http://163.172.181.252:3001
+# Set ENV NEXTAUTH_URL using the ARG value
+ENV NEXTAUTH_URL=${NEXTAUTH_URL}
+
+
 # Install necessary dependencies for manually downloaded Chromium on Alpine
 # wget and unzip are needed for download; fontconfig and ttf-
 RUN apk add --no-cache \
