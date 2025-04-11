@@ -1,4 +1,4 @@
-'use client';
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -420,17 +420,8 @@ export default function ProjectDetailPage() {
   return (
     // Reverted: Removed h-full. Relying on flex-grow from layout.
     // Added bg-gray-900 to the main container to ensure consistent background
+    // Removed Guest Mode Banner - Moved to layout
     <div className="flex flex-col md:flex-row relative flex-grow bg-gray-900">
-       {/* Guest Mode Banner */}
-       {isGuestMode && (
-        <div className="absolute top-0 left-0 right-0 bg-yellow-600 text-black text-center p-2 text-sm z-10">
-          You are viewing this project as a guest. &nbsp;
-          <Link href="/signup" className="font-bold underline hover:text-yellow-900">Sign up</Link>
-          &nbsp; or &nbsp;
-          <Link href="/login" className="font-bold underline hover:text-yellow-900">Log in</Link>
-          &nbsp; to save your work permanently.
-        </div>
-      )}
 
       {/* Left Column */}
       {/* Removed conditional padding pt-12 - now handled by layout */}
@@ -547,7 +538,6 @@ export default function ProjectDetailPage() {
         </div>
         {/* --- END REORDERED SECTIONS --- */}
       </div>
-
 
       {/* Right Column: Chat Interface - Use flex-grow to allow ChatInterface to fill height */}
       {/* Removed conditional padding pt-12 - now handled by layout */}

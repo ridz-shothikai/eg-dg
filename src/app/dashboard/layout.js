@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react'; // Added useState, useEffect
-import { useSession } from 'next-auth/react'; // Added useSession
+import React, { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import Link from 'next/link'; // Import Link for banner
 import Sidebar from '@/components/Sidebar';
 import DashboardHeader from '@/components/DashboardHeader';
 
@@ -24,8 +25,8 @@ export default function DashboardLayout({ children }) {
   }, [status]);
 
   // Determine main content padding based on guest view and header presence
-  // Assuming guest banner height is roughly pt-10 (40px) and header is h-16 (64px -> pt-16)
-  const mainPaddingTop = isGuestView ? 'pt-10' : 'pt-16';
+  // Assuming NARROW guest banner height is roughly pt-8 (32px) and header is h-16 (64px -> pt-16)
+  const mainPaddingTop = isGuestView ? 'pt-8' : 'pt-16'; // Adjusted guest padding
 
   // Don't render layout content until auth status is determined
   if (status === 'loading') {
@@ -43,17 +44,28 @@ export default function DashboardLayout({ children }) {
       )}
 
       {/* Main Content Area Wrapper */}
-      {/* Added relative positioning */}
       <div className="flex-grow flex flex-col overflow-hidden relative">
+        {/* Conditionally render Guest Banner (Sticky) */}
+        {isGuestView && (
+          <div className="sticky top-0 left-0 right-0 bg-yellow-600 text-black text-center py-1 px-2 text-xs z-20"> {/* Narrower padding (py-1), smaller text (text-xs), higher z-index */}
+            You are viewing this project as a guest. &nbsp;
+            <Link href="/signup" className="font-bold underline hover:text-yellow-900">Sign up</Link>
+            &nbsp; or &nbsp;
+            <Link href="/login" className="font-bold underline hover:text-yellow-900">Log in</Link>
+            &nbsp; to save your work permanently.
+          </div>
+         )}
+
         {/* Conditionally render DashboardHeader */}
         {!isGuestView && (
-          <div className="relative z-10"> {/* Wrapper for z-index */}
+          // Added sticky and z-index to header wrapper as well
+          <div className="sticky top-0 left-0 right-0 z-10"> {/* Ensure header is also sticky if needed, lower z-index than banner */}
             <DashboardHeader />
           </div>
         )}
 
         {/* Page Content - Fills space below header/banner and scrolls */}
-        {/* Adjusted padding based on isGuestView */}
+        {/* Adjusted padding calculation */}
         <main className={`absolute inset-0 ${mainPaddingTop} overflow-y-auto p-6`}>
           {children}
         </main>
