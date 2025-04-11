@@ -7,12 +7,11 @@ import Diagram from '@/models/Diagram';
 import mongoose from 'mongoose';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import mime from 'mime-types';
-// Removed pdf-lib imports
 import { Storage } from '@google-cloud/storage';
-// Removed fs/promises import
 import path from 'path';
 import * as constants from '@/constants';
-// Removed Puppeteer imports
+import { generateContentWithRetry } from '@/lib/geminiUtils'; // Import the retry helper
+import { fetchWithRetry } from '@/lib/fetchUtils'; // Import fetch retry helper for PDF API
 
 
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
@@ -58,52 +57,7 @@ const relaxedSafetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
 ];
 
-// Helper function to call Gemini
-async function callGemini(prompt, fileParts = [], applySafetySettings = false) {
-    // ... (keep existing callGemini function as is)
-    if (!gemini) throw new Error("Gemini model not initialized.");
-    try {
-        const parts = [{ text: prompt }];
-        if (fileParts && fileParts.length > 0) {
-            parts.push(...fileParts);
-        }
-        console.log(`Calling gemini.generateContent (Safety Settings: ${applySafetySettings ? 'Relaxed' : 'Default'})...`);
-        const loggableParts = parts.map(part => part.text ? { text: '...' } : { inlineData: { mimeType: part.inlineData.mimeType, data: '...' } });
-        console.log("Payload structure:", JSON.stringify([{ role: "user", parts: loggableParts }], null, 2));
-        const generationConfig = {};
-        const safetySettings = applySafetySettings ? relaxedSafetySettings : undefined;
-        const result = await gemini.generateContent({
-            contents: [{ role: "user", parts: parts }],
-            generationConfig,
-            safetySettings
-        });
-        if (!result.response) {
-            console.error("Received no response object from Gemini.");
-            throw new Error("Received no response from the generative model.");
-        }
-        const promptFeedback = result.response.promptFeedback;
-        if (promptFeedback?.blockReason) {
-            console.warn(`Gemini response blocked due to: ${promptFeedback.blockReason}`, promptFeedback.safetyRatings);
-            throw new Error(`Content generation blocked due to: ${promptFeedback.blockReason}`);
-        }
-        const responseText = result.response.text();
-        if (!responseText) {
-            console.error("Received empty text response from Gemini without explicit block reason:", JSON.stringify(result.response, null, 2));
-            throw new Error("Received an empty text response from the generative model.");
-        }
-        return responseText;
-    } catch (error) {
-        console.error("Error calling Gemini:", error);
-        if (error.message.includes("400 Bad Request")) {
-            const loggableParts = (fileParts || []).map(part => ({ inlineData: { mimeType: part.inlineData.mimeType, data: '...' } }));
-            console.error("Parts sent on Bad Request:", JSON.stringify([{ text: prompt }, ...loggableParts], null, 2));
-            throw new Error(`Gemini API Bad Request: ${error.message}. Check data format and prompt.`);
-        }
-        throw error;
-    }
-}
-
-// --- REMOVED createPdfFromHtml function ---
+// --- REMOVED local callGemini helper function ---
 
 // Function to send SSE messages
 function sendSseMessage(controller, data, eventName = 'message') {
@@ -188,7 +142,7 @@ export async function GET(request, { params }) {
   // --- End Authorization Check ---
 
 
-  const stream = new ReadableStream({
+  const sseStream = new ReadableStream({ // Renamed variable
     async start(controller) {
       console.log(`BoM SSE stream started for project ${projectId}`);
       sendSseMessage(controller, { status: 'Initializing BoM report...' });
@@ -249,8 +203,20 @@ export async function GET(request, { params }) {
             const diagramNamesString = processedDiagramNames.join(', ');
             const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract all text content accurately. Focus on text relevant to components, materials, dimensions, and quantities.`;
             sendSseMessage(controller, { status: 'Analyzing key Information...' });
-            ocrText = await callGemini(ocrPrompt, fileParts, true); // Apply safety settings for OCR
-            if (!ocrText) throw new Error("OCR process returned empty text.");
+
+            // Use generateContentWithRetry for OCR
+            const ocrResult = await generateContentWithRetry(
+                gemini,
+                {
+                    contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...fileParts] }],
+                    safetySettings: relaxedSafetySettings // Apply safety settings for OCR
+                },
+                3, // maxRetries
+                (attempt, max) => sendSseMessage(controller, { status: `Retrying text extraction (${attempt}/${max})...` }) // onRetry callback
+            );
+            ocrText = ocrResult.response.text(); // Get text from result
+
+            if (!ocrText) throw new Error("OCR process returned empty text after retries."); // Updated error message
             sendSseMessage(controller, { status: 'Text extraction complete.' });
         } catch (ocrError) {
             console.error("BoM SSE: Error during Gemini OCR call:", ocrError);
@@ -269,7 +235,8 @@ export async function GET(request, { params }) {
         let bomReportHtml = '';
         // --- Step 2: Generate BoM Report as HTML with Error Handling ---
         try {
-            const bomPrompt = `Based on the following OCR text extracted from engineering diagrams (Project: ${project.name}), generate a detailed Bill of Materials (BoM) in **HTML format**.
+            // Updated Prompt: Instruct AI to use both OCR text and original files
+            const bomPrompt = `Based on the following OCR text extracted from the provided engineering diagram files (Project: ${project.name}), and considering the content of the files themselves, generate a detailed Bill of Materials (BoM) in **HTML format**.
 
 **Instructions for HTML Structure:**
 1.  Present the BoM primarily as an HTML table (\`<table>\`) with a clear header row (\`<thead>\` containing \`<th>\` elements) and data rows (\`<tbody>\` containing \`<tr>\` with \`<td>\` elements).
@@ -279,20 +246,36 @@ export async function GET(request, { params }) {
 5.  Ensure the entire output is a single, valid HTML document body content (you don't need to include \`<html>\` or \`<head>\` tags yourself, just the content that would go inside \`<body>\`).
 
 **Content Focus:**
-*   Identify each distinct component mentioned.
-*   Extract quantity, dimensions, material, and other specifications for each component.
-*   Be comprehensive and accurate based *only* on the provided OCR text.
+*   Identify each distinct component mentioned in the OCR text and visible in the diagrams.
+*   Extract quantity, dimensions, material, and other specifications for each component, using both the OCR text and direct analysis of the diagrams if possible.
+*   Cross-reference information between the OCR text and the diagrams for accuracy.
+*   Be comprehensive and accurate based on *all* provided information (OCR text and diagram files).
 
-**OCR Text:**
+**Provided Diagram Files:**
+(Content of files is provided separately in the request parts)
+
+**Extracted OCR Text:**
 ---
 ${ocrText}
 ---
 
-Generate the Bill of Materials report in HTML format now.`;
+Generate the Bill of Materials report in HTML format now, using both the OCR text and the provided diagram files for context.`;
 
             sendSseMessage(controller, { status: 'Generating Bill of Materials ...' });
-            bomReportHtml = await callGemini(bomPrompt, [], false); // No files needed here, no special safety settings
-            if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML.");
+
+            // Use generateContentWithRetry for BoM generation
+            const bomResult = await generateContentWithRetry(
+                gemini,
+                {
+                    contents: [{ role: "user", parts: [{ text: bomPrompt }, ...fileParts] }]
+                    // No special safety settings needed here by default
+                },
+                3, // maxRetries
+                (attempt, max) => sendSseMessage(controller, { status: `Retrying BoM generation (${attempt}/${max})...` }) // onRetry callback
+            );
+            bomReportHtml = bomResult.response.text(); // Get text from result
+
+            if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML after retries."); // Updated error message
 
         } catch (bomError) {
             console.error("BoM SSE: Error during Gemini BoM generation call:", bomError);
@@ -418,11 +401,20 @@ Generate the Bill of Materials report in HTML format now.`;
         let pdfUrl = null;
         try {
             console.log(`Calling HTML to PDF API: ${HTML_TO_PDF_API_URL}`);
-            const apiResponse = await fetch(HTML_TO_PDF_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
-            });
+            // Use fetchWithRetry for PDF API call
+            const apiResponse = await fetchWithRetry(
+                HTML_TO_PDF_API_URL,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
+                },
+                3, // maxRetries
+                (attempt, max) => sendSseMessage(controller, { status: `Retrying PDF conversion (${attempt}/${max})...` }) // onRetry callback
+            );
+
+            // Reset status after retries finish (success or fail)
+            sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' });
 
             if (!apiResponse.ok) {
                 const errorBody = await apiResponse.text();
@@ -468,7 +460,7 @@ Generate the Bill of Materials report in HTML format now.`;
     }
   });
 
-  return new Response(stream, {
+  return new Response(sseStream, { // Use renamed variable
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

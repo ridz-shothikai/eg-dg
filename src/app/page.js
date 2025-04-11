@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import MultiStepProgressBar from '@/components/MultiStepProgressBar'; // Import the new component
+import { fetchWithRetry } from '@/lib/fetchUtils'; // Import the retry helper
 
 // Placeholder components for icons (replace with actual icons later)
 const PlaceholderIcon = ({ className = "w-6 h-6" }) => (
@@ -15,13 +17,20 @@ export default function HomePage() {
   const router = useRouter();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
+  const [uploadStep, setUploadStep] = useState(-1); // -1: idle, 0: creating, 1: uploading, 2: preparing
+  const [uploadProgressText, setUploadProgressText] = useState(''); // For dynamic text during multi-upload
 
-  // --- Guest Upload Logic (Updated for Guest ID) ---
-  const handleGuestUpload = async (file) => {
-    if (!file) return;
+  const uploadSteps = ["Creating Project", "Uploading Files", "Preparing Workspace"]; // Changed step 1 name
+
+  // --- Guest Upload Logic (Updated for Multiple Files & Progress) ---
+  const handleGuestUpload = async (files) => { // Accept FileList
+    if (!files || files.length === 0) return;
+    const numFiles = files.length;
     setIsUploading(true);
     setUploadError(null);
-    console.log('Guest upload initiated for file:', file.name);
+    setUploadStep(0); // Start step 0: Creating Project
+    setUploadProgressText(''); // Reset dynamic text
+    console.log(`Guest upload initiated for ${numFiles} file(s).`);
 
     try {
       // Generate or retrieve Guest ID
@@ -34,31 +43,95 @@ export default function HomePage() {
         console.log('Using existing guestId:', guestId);
       }
 
-      // Step 1: Create Project with Guest ID
-      const projectName = file.name.split('.').slice(0, -1).join('.') || `Guest Project - ${Date.now()}`;
-      const projectResponse = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Send guestId along with project details
-        body: JSON.stringify({ name: projectName, userId: null, guestId: guestId }),
-      });
-      if (!projectResponse.ok) throw new Error((await projectResponse.json()).message || 'Failed to create project');
+      // Step 1: Create Project with Guest ID (Use first file name for project name) - WITH RETRY
+      const firstFileName = files[0].name;
+      const projectName = firstFileName.split('.').slice(0, -1).join('.') || `Guest Project - ${Date.now()}`;
+      setUploadProgressText('Creating project...');
+
+      const projectResponse = await fetchWithRetry(
+        '/api/projects',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: projectName, userId: null, guestId: guestId }),
+        },
+        3, // maxRetries
+        (attempt, max) => { // onRetry callback
+          setUploadProgressText(`Creating project (Retrying ${attempt}/${max})...`);
+        }
+      );
+
+      // Reset progress text after successful attempt or final failure handled below
+      setUploadProgressText('Creating project...');
+
+      if (!projectResponse.ok) {
+        // Handle non-retryable client errors or final failure after retries
+        const errorData = await projectResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to create project after retries (Status: ${projectResponse.status})`);
+      }
+
       const projectData = await projectResponse.json();
       const projectId = projectData._id;
-      if (!projectId) throw new Error('Project ID not received.');
+      if (!projectId) throw new Error('Project ID not received after creation.');
       console.log('Project created:', projectId);
+      setUploadStep(1); // Move to step 1: Uploading Files
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('projectId', projectId);
-      const uploadResponse = await fetch('/api/upload', { method: 'POST', body: formData });
-      if (!uploadResponse.ok) throw new Error((await uploadResponse.json()).message || 'File upload failed');
-      console.log('File uploaded successfully');
+      // Step 2: Upload each file sequentially - WITH RETRY
+      const uploadErrors = [];
+      for (let i = 0; i < numFiles; i++) {
+        const currentFile = files[i];
+        const baseUploadText = `Uploading file ${i + 1} of ${numFiles}: ${currentFile.name}`;
+        setUploadProgressText(baseUploadText);
+        console.log(`Uploading file ${i + 1}/${numFiles}: ${currentFile.name}`);
+        const formData = new FormData();
+        formData.append('file', currentFile);
+        formData.append('projectId', projectId);
+
+        try {
+          const uploadResponse = await fetchWithRetry(
+            '/api/upload',
+            { method: 'POST', body: formData },
+            3, // maxRetries
+            (attempt, max) => { // onRetry callback
+              setUploadProgressText(`${baseUploadText} (Retrying ${attempt}/${max})...`);
+            }
+          );
+
+          // Reset progress text for the next file or final step
+           setUploadProgressText(baseUploadText); // Show base text again after retries finish (success or fail)
+
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json().catch(() => ({}));
+            throw new Error(errorData.message || `Upload failed for ${currentFile.name} after retries (Status: ${uploadResponse.status})`);
+          }
+          console.log(`File ${currentFile.name} uploaded successfully.`);
+        } catch (fileUploadError) {
+          console.error(`Error uploading ${currentFile.name} after retries:`, fileUploadError);
+          uploadErrors.push(`${currentFile.name}: ${fileUploadError.message}`);
+          // Continue to next file even if one fails after retries
+        }
+      }
+
+      // Handle upload errors if any occurred
+      if (uploadErrors.length > 0) {
+        // Combine errors into a single message or handle differently
+        throw new Error(`Some files failed to upload:\n${uploadErrors.join('\n')}`);
+      }
+
+      console.log('All files uploaded successfully.');
+      setUploadStep(2); // Move to step 2: Preparing Workspace
+      setUploadProgressText('Preparing workspace...'); // Update text
+
+      // Short delay before redirect
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       router.push(`/project/${projectId}`);
     } catch (error) {
-      console.error('Guest upload failed:', error);
-      setUploadError(error.message || 'An unexpected error occurred.');
+      console.error('Guest upload process failed:', error);
+      setUploadError(error.message || 'An unexpected error occurred during the upload process.');
       setIsUploading(false);
+      setUploadStep(-1); // Reset step on error
+      setUploadProgressText(''); // Clear dynamic text
     }
   };
 
@@ -105,14 +178,24 @@ export default function HomePage() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                       </svg>
                       <span className="font-medium text-gray-400">
-                        Drop your file here, or <span className="text-blue-400 underline">browse</span>
+                        Drop files here, or <span className="text-blue-400 underline">browse</span>
                       </span>
                     </span>
-                    <input type="file" id="guest-file-upload" className="hidden" onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) { handleGuestUpload(e.target.files[0]); }
-                    }} disabled={isUploading} />
+                    {/* Add 'multiple' attribute to allow multiple file selection */}
+                    <input type="file" id="guest-file-upload" className="hidden" multiple onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) { handleGuestUpload(e.target.files); } // Pass the FileList
+                      }} disabled={isUploading} />
                   </label>
-                  {isUploading && <p className="text-center text-blue-400 mt-4">Uploading and creating project...</p>}
+                  {/* Replace loading text with progress bar, pass dynamic text */}
+                  {isUploading && !uploadError && (
+                    <div className="mt-4">
+                      <MultiStepProgressBar
+                        steps={uploadSteps}
+                        currentStepIndex={uploadStep}
+                        currentStepTextOverride={uploadProgressText} // Pass dynamic text
+                      />
+                    </div>
+                  )}
                   {uploadError && <p className="text-center text-red-500 mt-4">Error: {uploadError}</p>}
                   <p className="text-xs text-gray-500 mt-2 text-center">Supported formats: PDF, PNG, JPG, DWG, DXF</p>
                 </div>

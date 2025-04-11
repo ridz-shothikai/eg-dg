@@ -7,12 +7,12 @@ import Diagram from '@/models/Diagram';
 import mongoose from 'mongoose';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import mime from 'mime-types';
-// Removed pdf-lib imports
 import { Storage } from '@google-cloud/storage';
 import fs from 'fs/promises'; // Keep fs for reading rules files
 import path from 'path';
 import * as constants from '@/constants';
-// Removed Puppeteer imports
+import { generateContentWithRetry } from '@/lib/geminiUtils'; // Import the retry helper
+import { fetchWithRetry } from '@/lib/fetchUtils'; // Import fetch retry helper for PDF API
 
 
 // Assuming rules files are correctly placed relative to the project root
@@ -64,37 +64,7 @@ const relaxedSafetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
 ];
 
-// Helper function to call Gemini
-async function callGemini(prompt, fileParts = [], applySafetySettings = false) {
-    // ... (keep existing callGemini function as is)
-    if (!gemini) throw new Error("Gemini model not initialized.");
-    try {
-        const parts = [{ text: prompt }];
-        if (fileParts && fileParts.length > 0) { parts.push(...fileParts); }
-        console.log(`Calling gemini.generateContent (Safety Settings: ${applySafetySettings ? 'Relaxed' : 'Default'})...`);
-        const loggableParts = parts.map(part => part.text ? { text: '...' } : { inlineData: { mimeType: part.inlineData.mimeType, data: '...' } });
-        console.log("Payload structure:", JSON.stringify([{ role: "user", parts: loggableParts }], null, 2));
-        const generationConfig = {};
-        const safetySettings = applySafetySettings ? relaxedSafetySettings : undefined;
-        const result = await gemini.generateContent({ contents: [{ role: "user", parts: parts }], generationConfig, safetySettings });
-        if (!result.response) { console.error("No response object."); throw new Error("No response."); }
-        const promptFeedback = result.response.promptFeedback;
-        if (promptFeedback?.blockReason) { console.warn(`Blocked: ${promptFeedback.blockReason}`); throw new Error(`Blocked: ${promptFeedback.blockReason}`); }
-        const responseText = result.response.text();
-        if (!responseText) { console.error("Empty text response."); throw new Error("Empty response."); }
-        return responseText;
-    } catch (error) {
-        console.error("Error calling Gemini:", error);
-        if (error.message.includes("400 Bad Request")) {
-             const loggableParts = (fileParts || []).map(part => ({ inlineData: { mimeType: part.inlineData.mimeType, data: '...' } }));
-             console.error("Parts sent on Bad Request:", JSON.stringify([{ text: prompt }, ...loggableParts], null, 2));
-             throw new Error(`Gemini API Bad Request: ${error.message}. Check data format/prompt.`);
-         }
-        throw error;
-    }
-}
-
-// --- REMOVED createPdfFromHtml function ---
+// --- REMOVED local callGemini helper function ---
 
 
 // Function to send SSE messages
@@ -265,8 +235,20 @@ export async function GET(request, { params }) {
             const diagramNamesString = processedDiagramNames.join(', ');
             const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract text relevant to components, materials, dimensions, specifications, and safety notes.`;
             sendSseMessage(controller, { status: 'Analyzing key Information...' });
-            ocrText = await callGemini(ocrPrompt, fileParts, true); // Relaxed safety
-            if (!ocrText) throw new Error("OCR process returned empty text.");
+
+            // Use generateContentWithRetry for OCR
+            const ocrResult = await generateContentWithRetry(
+                gemini,
+                {
+                    contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...fileParts] }],
+                    safetySettings: relaxedSafetySettings // Apply safety settings for OCR
+                },
+                3, // maxRetries
+                (attempt, max) => sendSseMessage(controller, { status: `Retrying text extraction (${attempt}/${max})...` }) // onRetry callback
+            );
+            ocrText = ocrResult.response.text(); // Get text from result
+
+            if (!ocrText) throw new Error("OCR process returned empty text after retries."); // Updated error message
             sendSseMessage(controller, { status: 'Text extraction complete.' });
 
             // --- Step 2: Load Compliance Rules ---
@@ -275,7 +257,8 @@ export async function GET(request, { params }) {
             if (complianceRulesText.startsWith("Error:")) throw new Error(complianceRulesText); // Propagate rule loading error
 
             // --- Step 3: Generate Compliance Report as HTML ---
-            const compliancePrompt = `Analyze the following OCR text extracted from engineering diagrams (Project: ${project.name}) against the provided compliance rules (IBC, Eurocodes, IS) and generate a Compliance Report in **HTML format**.
+            // Updated Prompt: Instruct AI to use both OCR text and original files
+            const compliancePrompt = `Analyze the following OCR text extracted from the provided engineering diagram files (Project: ${project.name}), and considering the content of the files themselves, against the provided compliance rules (IBC, Eurocodes, IS) and generate a Compliance Report in **HTML format**.
 
 **Instructions for HTML Structure:**
 1.  Use standard HTML tags: \`<h1>\`, \`<h2>\`, \`<h3>\` for headings, \`<p>\` for paragraphs, \`<ul>\`/\`<ol>\`/\`<li>\` for lists.
@@ -285,26 +268,42 @@ export async function GET(request, { params }) {
 5.  Ensure the entire output is a single, valid HTML document body content (you don't need to include \`<html>\` or \`<head>\` tags yourself, just the content that would go inside \`<body>\`).
 
 **Content Focus:**
-*   Identify components and specifications from the OCR text relevant to the rules.
-*   Compare these against the provided rules.
+*   Identify components and specifications from the OCR text and diagrams relevant to the rules.
+*   Compare these against the provided rules, using both OCR text and diagram content for context.
 *   For each relevant rule/component, state the compliance status (Compliant, Non-Compliant, Undetermined).
-*   Provide specific reasons for the status, citing the rule/standard where possible.
+*   Provide specific reasons for the status, citing the rule/standard and referencing details from the OCR text or diagrams where possible.
+*   Be comprehensive based on *all* provided information (OCR text, diagram files, and rules).
+
+**Provided Diagram Files:**
+(Content of files is provided separately in the request parts)
 
 **Compliance Rules:**
 ---
 ${complianceRulesText}
 ---
 
-**OCR Text:**
+**Extracted OCR Text:**
 ---
 ${ocrText}
 ---
 
-Generate the Compliance Report in HTML format now.`;
+Generate the Compliance Report in HTML format now, using the OCR text, the provided diagram files, and the compliance rules for context.`;
 
             sendSseMessage(controller, { status: 'Analyzing compliance...' });
-            complianceReportHtml = await callGemini(compliancePrompt, [], false); // Default safety
-            if (!complianceReportHtml) throw new Error("Compliance analysis failed.");
+
+            // Use generateContentWithRetry for Compliance analysis
+            const complianceResult = await generateContentWithRetry(
+                gemini,
+                {
+                    contents: [{ role: "user", parts: [{ text: compliancePrompt }, ...fileParts] }]
+                    // No special safety settings needed here by default
+                },
+                3, // maxRetries
+                (attempt, max) => sendSseMessage(controller, { status: `Retrying compliance analysis (${attempt}/${max})...` }) // onRetry callback
+            );
+            complianceReportHtml = complianceResult.response.text(); // Get text from result
+
+            if (!complianceReportHtml) throw new Error("Compliance analysis failed after retries."); // Updated error message
             sendSseMessage(controller, { status: 'Compliance analysis complete.' });
 
         } catch (geminiError) { // Catch errors from either OCR or Compliance generation
@@ -438,11 +437,20 @@ Generate the Compliance Report in HTML format now.`;
         let pdfUrl = null;
         try {
             console.log(`Calling HTML to PDF API: ${HTML_TO_PDF_API_URL}`);
-            const apiResponse = await fetch(HTML_TO_PDF_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
-            });
+            // Use fetchWithRetry for PDF API call
+            const apiResponse = await fetchWithRetry(
+                HTML_TO_PDF_API_URL,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
+                },
+                3, // maxRetries
+                (attempt, max) => sendSseMessage(controller, { status: `Retrying PDF conversion (${attempt}/${max})...` }) // onRetry callback
+            );
+
+             // Reset status after retries finish (success or fail)
+            sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' });
 
             if (!apiResponse.ok) {
                 const errorBody = await apiResponse.text();

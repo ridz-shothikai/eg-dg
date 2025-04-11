@@ -12,6 +12,7 @@ import path from 'node:path';
 import os from 'node:os';
 import mime from 'mime-types';
 import * as constants from '@/constants';
+import { generateContentWithRetry } from '@/lib/geminiUtils'; // Import the retry helper
 
 const {
   MONGODB_URI,
@@ -326,7 +327,14 @@ export async function GET(request, context) { // Keep context for potential futu
                 parts.push(...fileInputParts);
             }
             const contents = [{ role: "user", parts: parts }];
-            const result = await geminiModel.generateContent({ contents });
+
+            // Use generateContentWithRetry for summary/suggestions
+            const result = await generateContentWithRetry(
+                geminiModel,
+                { contents },
+                3, // maxRetries
+                (attempt, max) => console.log(`Retrying Gemini summary/suggestions (${attempt}/${max})...`) // Simple log on retry
+            );
 
             if (result.response) {
                 const responseText = result.response.text();

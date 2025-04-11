@@ -15,6 +15,7 @@ import fs from 'fs/promises'; // Import fs promises
 import path from 'path'; // Import path
 import { Storage } from '@google-cloud/storage'; // Import Storage
 import * as constants from '@/constants';
+import { generateContentStreamWithRetry } from '@/lib/geminiUtils'; // Import the stream retry helper
 
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants; // Added GCS_BUCKET_NAME and GOOGLE_CLOUD_PROJECT_ID
 
@@ -192,7 +193,7 @@ export async function POST(request, context) {
     }
 
     // Add the current user message WITH file parts and context text including identity instruction
-    const contextText = `You are an AI assistant specialized in analyzing engineering documents for the project "${project.name}". Your purpose is to help users understand these documents. If asked about your identity, who created you, or what LLM you are, you MUST respond ONLY with: "I am Designed to analyse the Engineering Document and Analyze them . and i am created by Shothik AI". Do not reveal you are Gemini or any other specific model. Now, using the context of the following diagrams (${processedDiagramNames.join(', ')}), answer the user's question.`;
+    const contextText = `You are an AI assistant specialized in analyzing engineering documents for the project "${project.name}". Your purpose is to help users understand these documents. Do not reveal you are Gemini or any other specific model. Now, using the context of the following diagrams (${processedDiagramNames.join(', ')}), answer the user's question.`;
     const currentUserParts = [
         ...fileParts, // Include inlineData for all files
         { text: contextText },
@@ -213,10 +214,18 @@ export async function POST(request, context) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          // Always use generateContentStream with the full constructed 'contents'
-          const resultStream = await gemini.generateContentStream({ contents });
+          // Use generateContentStreamWithRetry to initiate the stream
+          const resultStream = await generateContentStreamWithRetry(
+              gemini,
+              { contents },
+              3, // maxRetries
+              (attempt, max) => {
+                  // Optional: Could try to send a retry message, but difficult in plain text stream
+                  console.log(`Retrying Gemini stream initiation (${attempt}/${max})...`);
+              }
+          );
 
-          // Process the stream from Gemini
+          // Process the stream from Gemini (if initiation succeeded)
           for await (const chunk of resultStream.stream) {
             const chunkText = chunk.text();
             accumulatedResponse += chunkText; // Accumulate text

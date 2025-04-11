@@ -10,6 +10,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import fs from 'fs/promises'; // Import fs promises
 import path from 'path'; // Import path
 import * as constants from '@/constants';
+import { generateContentWithRetry } from '@/lib/geminiUtils'; // Import the retry helper
 
 const {
   MONGODB_URI,
@@ -135,8 +136,14 @@ export async function POST(request) {
     if (gemini && ocrText) {
       try {
         const prompt = `Summarize the key components, materials, and dimensions mentioned in this OCR text from an engineering diagram:\n\n${ocrText}`;
-        const result = await gemini.generateContent(prompt);
-        const response = await result.response;
+        // Use generateContentWithRetry for the summary
+        const result = await generateContentWithRetry(
+            gemini,
+            prompt, // Simple text prompt
+            3, // maxRetries
+            (attempt, max) => console.log(`Retrying Gemini summary (${attempt}/${max})...`) // Simple log on retry
+        );
+        const response = result.response; // Result is already awaited
         geminiResponse = response.text(); // Use text() method
         console.log('Gemini initial summary generated.');
       } catch (geminiError) {

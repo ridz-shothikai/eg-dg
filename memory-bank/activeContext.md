@@ -1,10 +1,27 @@
-# Active Context: Layout Refactor & Guest Flow Implementation
+# Active Context: Guest Upload Enhancements & Fixes
 
-**Date:** April 10, 2025 (Late Afternoon Update 3)
+**Date:** April 11, 2025 (Morning)
 
-**Status:** Added specific identity response instruction to chat AI prompt. Reworked chat API to send all files with every request to improve multi-file context. Implemented default project creation for new users. Implemented robust multi-file handling and error reporting for chat and report generation APIs. Ensured all project files are loaded before Gemini interaction, or the process fails clearly. Added user-friendly error messages for GCS download failures and Gemini API errors.
+**Status:** Fixed guest authorization for file sync API. Implemented multi-file upload for guests on the landing page with a detailed progress bar. Reviewed and decided against increasing report detail/length for now.
 
-**Recent Activity (April 10 - Late Afternoon Update 3):**
+**Recent Activity (April 11 - Morning):**
+- **Guest Multi-File Upload & Progress Bar:**
+    - Modified landing page (`src/app/page.js`) file input to accept multiple files (`multiple` attribute).
+    - Updated `handleGuestUpload` function in `src/app/page.js` to:
+        - Create the guest project once.
+        - Loop through selected files, calling `/api/upload` for each.
+        - Track upload progress using a new state variable (`uploadStep`).
+        - Display dynamic progress text during the multi-file upload stage.
+    - Created new component `src/components/MultiStepProgressBar.js` to display upload steps ("Creating Project", "Uploading Files", "Preparing Workspace") and dynamic progress text.
+    - Integrated `MultiStepProgressBar` into `src/app/page.js`, replacing the simple "Uploading..." text.
+- **Guest File Sync Fix:**
+    - Identified that the `/api/projects/[projectId]/sync-files` API call in `src/app/project/[projectId]/page.js` was missing the `X-Guest-ID` header for guest users.
+    - Updated the `fetch` call within the `useEffect` hook in `src/app/project/[projectId]/page.js` to include the `headers` object (which already contains the conditional `X-Guest-ID`), resolving the 401 error for guests.
+- **Report Detail Review:**
+    - Reviewed prompts in BoM, OCR/PDR, and Compliance report API routes (`/api/projects/[projectId]/reports/...`).
+    - Decided *not* to modify prompts to increase report length/detail at this time.
+
+**Previous Activity (April 10 - Late Afternoon Update 3):**
 - **Chat AI Identity Response:**
     - Modified Chat API (`/api/chat/[projectId]/route.js`).
     - Updated the `contextText` sent to the Gemini model to include a specific instruction: If asked about its identity, creator, or LLM, the AI must respond *only* with "I am Designed to analyse the Engineering Document and Analyze them . and i am created by Shothik AI".
@@ -64,14 +81,14 @@
 - **Dependency Updates & Docker:** Updated major dependencies. Simplified Docker setup.
 
 **Current Focus:**
-- Verifying the fixes for report generation (both functionality and PDF styling).
-- Confirming guest user report downloads work correctly.
-- Testing landing page UI interactions (upload area hover/border).
-- Testing chat UI functionality (dynamic width, auto-scroll, styling).
+- Testing guest multi-file upload functionality and progress bar display.
+- Verifying the guest file sync fix by observing network requests or logs after guest upload/redirect.
+- Confirming no regressions were introduced by recent changes.
 
 **Next Steps:**
-1.  Thoroughly test report generation for authenticated and guest users.
-2.  Test layout consistency across all static pages.
-3.  Begin populating content for the `/solutions`, `/how-it-works`, `/use-cases`, and `/resources` pages.
-4.  Replace placeholder assets (logo, icons) when available.
-5.  Address any regressions from recent changes.
+1.  Thoroughly test the guest multi-file upload flow.
+2.  Verify the guest file sync now works without 401 errors after upload.
+3.  Test report generation for authenticated and guest users (no changes made, but good to re-verify).
+4.  Test layout consistency across all static pages.
+5.  Begin populating content for the `/solutions`, `/how-it-works`, `/use-cases`, and `/resources` pages.
+6.  Replace placeholder assets (logo, icons) when available.

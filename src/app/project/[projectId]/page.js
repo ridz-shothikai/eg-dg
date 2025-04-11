@@ -187,7 +187,8 @@ export default function ProjectDetailPage() {
 
         if (data.diagrams?.length > 0) {
           console.log("Triggering background file sync...");
-          fetch(`/api/projects/${projectId}/sync-files`, { method: 'POST' })
+          // Add headers to the sync-files call
+          fetch(`/api/projects/${projectId}/sync-files`, { method: 'POST', headers: headers })
             .then(async (res) => { const d=await res.json().catch(()=>({})); if(res.ok) console.log(`Sync: ${d.synced} synced, ${d.skipped} skipped, ${d.errors} errors`); else console.error(`Sync failed: ${d.message||res.statusText}`); })
             .catch(err => console.error("Sync trigger error:", err));
         }
@@ -444,7 +445,8 @@ export default function ProjectDetailPage() {
             <ul className="space-y-2">
               {diagrams.map((diagram) => (
                 <li key={diagram._id} className="bg-gray-700 p-3 rounded">
-                  <p className="font-medium truncate text-sm mb-1" title={diagram.fileName}>{diagram.fileName}</p>
+                  {/* Added text-white class for better visibility */}
+                  <p className="font-medium truncate text-sm mb-1 text-white" title={diagram.fileName}>{diagram.fileName}</p>
                   <p className="text-xs text-gray-400 mb-2">{new Date(diagram.createdAt).toLocaleDateString()}</p>
                   {/* Removed individual file action links */}
                 </li>

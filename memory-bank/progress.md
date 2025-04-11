@@ -1,8 +1,8 @@
 # Progress: Engineering Insights
 
-**Date:** April 10, 2025 (Late Afternoon Update)
+**Date:** April 11, 2025 (Morning)
 
-**Current Status:** Implemented default project creation for new users. Implemented robust multi-file handling and error reporting for chat/reports. Replaced Puppeteer PDF generation with external API. Fixed guest auth for reports. Resolved layout/UI issues on landing/static pages.
+**Current Status:** Fixed guest authorization for file sync API. Implemented multi-file upload for guests on the landing page with a detailed progress bar. Reviewed and decided against increasing report detail/length for now. Default project creation, robust multi-file handling/error reporting for chat/reports, external PDF generation, and previous layout/UI fixes remain functional.
 
 **What Works:**
 -   **Core Setup:** Project structure, Memory Bank, basic pages (Auth, Upload), styling, DB schemas. Build process successful.
@@ -19,17 +19,18 @@
     -   Placeholder pages created for `/solutions`, `/how-it-works`, `/use-cases`, `/resources` with content structure and consistent layout.
     -   Consistent dark theme applied.
 -   **Guest User Flow:**
-    -   Guest upload integrated into landing page Hero section.
+    -   Guest upload integrated into landing page Hero section, now supports **multiple file selection**.
     -   `guestId` generated/stored/sent via `localStorage`.
     -   Backend models (`Project`, `Diagram`) updated with guest fields.
-    -   Backend APIs handle guest creation, authorization (header/query param), and data association on registration.
-    -   Project Dashboard (`/project/[projectId]`) handles guest state, displays banner, sends guest ID via query param for report downloads.
+    -   Backend APIs handle guest creation (once per multi-upload), authorization (header/query param), and data association on registration.
+    -   Project Dashboard (`/project/[projectId]`) handles guest state, displays banner, sends guest ID via query param for report downloads, and correctly triggers background file sync (`/api/projects/[projectId]/sync-files`) using guest auth header (**Fix implemented April 11**).
     -   Signup page (`/signup`) handles `guestId` transfer and clearing.
 -   **UI Components:**
     -   `LoadingSpinner` component updated to accept `size` prop.
     -   Project detail page uses centered, `md` size spinner for loading states. Login/Signup pages center forms correctly.
     -   Landing page upload area styling updated (always visible white dashed border, inner hover effect).
--   **File Handling:** GCS upload for diagrams. API direct downloads from GCS for chat.
+    -   **New:** `MultiStepProgressBar` component created and integrated into landing page guest upload, showing dynamic progress text for multi-file uploads.
+-   **File Handling:** GCS upload for diagrams (supports sequential uploads for guest multi-file). API direct downloads from GCS for chat. Background file sync API (`sync-files`) correctly handles guest authorization.
 -   **Diagram Processing:** Google Cloud Vision OCR on upload.
 -   **Project Management:** API for creating/fetching projects (supports guest), Sidebar display, New Project modal.
 -   **Chat:**
@@ -52,8 +53,9 @@
 
 **What's Left to Build (High Level):**
 -   **Testing:**
+    -   Thorough testing of the **guest multi-file upload flow** and progress bar display.
+    -   Verification that the **guest file sync (`sync-files` API)** works without 401 errors after upload.
     -   Thorough testing of report generation (auth/guest, PDF styling).
-    -   Thorough testing of the complete guest user flow.
     -   Testing layout consistency across all static pages.
     -   Testing chat UI functionality (dynamic width, auto-scroll, styling, responsiveness).
     -   Testing Vercel deployment.
@@ -68,6 +70,7 @@
     -   Implement Knowledge Hub search functionality.
     -   Implement Admin Panel functionalities.
 -   **Deployment:** CI/CD setup, Deployment Preparation.
+-   **(Decision - April 11):** Decided **not** to increase report detail/length via prompt changes for now.
 -   **(Decision):** Clarify if Google Vision OCR is still needed or if Gemini OCR suffices.
 -   **(External):** Consider if temporary report files from external API need cleanup (depends on API behavior).
 
@@ -76,4 +79,4 @@
 -   Placeholder content/assets used extensively on marketing pages.
 -   Mobile navigation menu in Header needs implementation.
 
-**Development Plan Phase:** Completed report generation refactor and UI fixes. Focus shifts to testing and content population (Phase 6/7).
+**Development Plan Phase:** Completed guest upload enhancements and fixes. Focus remains on testing and content population (Phase 6/7).
