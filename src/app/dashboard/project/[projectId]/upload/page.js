@@ -1,22 +1,30 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // Import useState
 import FileUpload from '@/components/FileUpload';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
 export default function ProjectUploadPage() {
   const { projectId } = useParams();
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [isGuestAllowed, setIsGuestAllowed] = useState(false); // State to track allowed guests
 
   useEffect(() => {
     if (status === 'loading') return; // Do nothing while loading
     if (status === 'unauthenticated') {
-      router.push('/login'); // Redirect to login if not authenticated
+      // Check for guestId before redirecting
+      const guestId = localStorage.getItem('guestId');
+      if (!guestId) {
+        router.push('/login'); // Redirect only if unauthenticated AND no guestId
+      } else {
+        setIsGuestAllowed(true); // Allow rendering if guestId exists
+      }
+    } else {
+      setIsGuestAllowed(false); // Ensure it's false if authenticated or loading
     }
     // Add authorization check later: ensure user owns this project
   }, [session, status, router]);
@@ -25,7 +33,8 @@ export default function ProjectUploadPage() {
      return <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">Loading...</div>;
   }
 
-  if (status === 'authenticated') {
+  // Render if authenticated OR if guest is allowed
+  if (status === 'authenticated' || isGuestAllowed) {
     return (
       // Removed flex, flex-col, h-full. Let nested layout handle height/scroll.
       <div className="bg-gray-900 text-white p-8">
