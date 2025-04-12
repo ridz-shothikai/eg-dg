@@ -79,92 +79,79 @@ export default function FileUpload({ projectId }) { // Accept projectId as prop
     setIsUploadingGlobal(true);
     setOverallError('');
 
-    const pendingFileIndexes = filesToUpload
-        .map((f, index) => (f.status === 'pending' ? index : -1))
-        .filter(index => index !== -1);
+    // Get pending files with their original indexes
+    const pendingFiles = filesToUpload
+      .map((f, index) => ({ ...f, originalIndex: index }))
+      .filter(f => f.status === 'pending');
 
-    let allUploadsSuccessful = true;
+    // Update status for all pending files to 'uploading'
+    pendingFiles.forEach(f => {
+        updateFileState(f.originalIndex, { status: 'uploading', progress: 0, error: null });
+    });
 
-    for (const index of pendingFileIndexes) {
-      const fileObj = filesToUpload[index];
-      updateFileState(index, { status: 'uploading', progress: 0, error: null });
-
+    // Create upload promises
+    const uploadPromises = pendingFiles.map(async (fileObj) => {
+      const index = fileObj.originalIndex;
       try {
         const formData = new FormData();
         formData.append('file', fileObj.file);
         formData.append('projectId', projectId);
 
-        // Use a Promise wrapper for XMLHttpRequest
-        await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
+        // Note: fetch doesn't support progress events directly.
+        // We'll update progress to 100% on success, 0% on failure for simplicity.
+        // For actual progress, libraries like Axios or custom XHR are needed.
+        // Since we removed XHR, we lose granular progress here.
+        // Let's simulate 0 -> 100 on completion.
 
-          xhr.upload.onprogress = (event) => {
-            if (event.lengthComputable) {
-              const percentComplete = Math.round((event.loaded / event.total) * 100);
-              updateFileState(index, { progress: percentComplete });
-            }
-          };
-
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                const data = JSON.parse(xhr.responseText);
-                console.log(`Upload successful for ${fileObj.file.name}:`, data);
-                updateFileState(index, { status: 'complete', progress: 100 });
-                resolve(data);
-              } catch (parseError) {
-                 console.error(`Error parsing upload response for ${fileObj.file.name}:`, parseError);
-                 updateFileState(index, { status: 'error', error: 'Invalid server response.' });
-                 allUploadsSuccessful = false;
-                 resolve(); // Resolve even on parse error to continue loop
-              }
-            } else {
-              try {
-                const errorData = JSON.parse(xhr.responseText);
-                const errorMessage = errorData.message || `Upload failed (Status: ${xhr.status})`;
-                console.error(`Upload failed for ${fileObj.file.name}:`, xhr.status, xhr.responseText);
-                updateFileState(index, { status: 'error', error: errorMessage });
-              } catch (parseError) {
-                 const errorMessage = `Upload failed (Status: ${xhr.status})`;
-                 console.error(`Upload failed for ${fileObj.file.name} (could not parse error):`, xhr.status, xhr.responseText);
-                 updateFileState(index, { status: 'error', error: errorMessage });
-              }
-              allUploadsSuccessful = false;
-              resolve(); // Resolve even on error to continue loop
-            }
-          };
-
-          xhr.onerror = () => {
-            console.error(`Upload network error for ${fileObj.file.name}`);
-            updateFileState(index, { status: 'error', error: 'Network error.' });
-            allUploadsSuccessful = false;
-            resolve(); // Resolve on network error to continue loop
-          };
-
-          xhr.open('POST', '/api/upload', true);
-          xhr.send(formData);
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+          // Add guest header if needed (though this component seems intended for authenticated users)
+          // headers: isGuestMode ? { 'X-Guest-ID': guestId } : {},
         });
 
-      } catch (error) { // Catch errors from preparing the request
-        console.error(`File upload setup error for ${fileObj.file.name}:`, error);
-        updateFileState(index, { status: 'error', error: 'Failed to initiate upload.' });
-        allUploadsSuccessful = false;
-        // Continue to next file
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMessage = errorData.message || `Upload failed (Status: ${response.status})`;
+          throw new Error(errorMessage); // Throw to trigger catch block
+        }
+
+        const data = await response.json();
+        console.log(`Upload successful for ${fileObj.file.name}:`, data);
+        updateFileState(index, { status: 'complete', progress: 100 });
+        return { status: 'fulfilled', index }; // Indicate success
+      } catch (error) {
+        console.error(`Upload failed for ${fileObj.file.name}:`, error);
+        updateFileState(index, { status: 'error', error: error.message || 'Upload failed.', progress: 0 });
+        return { status: 'rejected', index, reason: error.message }; // Indicate failure
       }
-    } // End of loop
+    });
+
+    // Wait for all uploads to settle
+    const results = await Promise.allSettled(uploadPromises);
 
     setIsUploadingGlobal(false);
 
-    // Redirect only if all uploads were successful
-    if (allUploadsSuccessful && filesToUpload.every(f => f.status === 'complete')) {
-        console.log("All files uploaded successfully. Redirecting...");
+    const failedUploads = results.filter(r => r.status === 'rejected');
+    const successfulUploads = results.filter(r => r.status === 'fulfilled');
+
+    if (failedUploads.length > 0) {
+        setOverallError(`Failed to upload ${failedUploads.length} file(s). Please check the list.`);
+    }
+
+    // Redirect if at least one upload was successful and no uploads failed? Or only if all succeeded?
+    // Let's redirect if *any* succeeded and none are pending/uploading anymore.
+    const anyPending = filesToUpload.some(f => f.status === 'pending' || f.status === 'uploading');
+    if (successfulUploads.length > 0 && !anyPending) {
+        console.log("Upload process finished. Redirecting...");
         // Optionally clear state before redirect
         // setFilesToUpload([]);
         setTimeout(() => {
-            router.push(`/project/${projectId}`);
+            // Redirect to the main project dashboard page
+            router.push(`/dashboard/project/${projectId}`);
         }, 1000); // Delay to show completion status
-    } else if (!allUploadsSuccessful) {
-         setOverallError("Some files failed to upload. Please check the list below.");
+    } else if (successfulUploads.length === 0 && failedUploads.length > 0) {
+         setOverallError("All file uploads failed."); // More specific error if all failed
     }
   };
 
