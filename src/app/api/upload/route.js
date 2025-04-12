@@ -10,7 +10,8 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import fs from 'fs/promises'; // Import fs promises
 import path from 'path'; // Import path
 import * as constants from '@/constants';
-import { generateContentWithRetry } from '@/lib/geminiUtils'; // Import the retry helper
+import { generateContentWithRetry } from '@/lib/geminiUtils';
+import { prepareDiagramInBackground } from '@/lib/backgroundTasks'; // Import the background task trigger
 
 const {
   MONGODB_URI,
@@ -150,49 +151,11 @@ export async function POST(request) {
         console.error('Gemini summary error:', geminiError);
       }
     } else {
-      console.warn("Skipping Gemini initial summary (API key missing or no OCR text).");
+  console.warn("Skipping synchronous Gemini initial summary.");
     }
 
-    // --- Extract BoM/BoQ data (Placeholder) ---
-    let billOfMaterials = null;
-    if (ocrText) {
-       try {
-        const quantityRegex = /(\d+)\s+(.*?)(?=\n|$)/gmi;
-        let match;
-        const items = [];
-        while ((match = quantityRegex.exec(ocrText)) !== null) {
-          items.push({ item_name: match[2].trim(), quantity: parseInt(match[1]) });
-        }
-        billOfMaterials = items;
-        console.log('Extracted BoM:', billOfMaterials);
-      } catch (bomError) {
-        console.error('BoM extraction error:', bomError);
-      }
-    } else {
-      console.warn("OCR text is missing. Skipping BoM extraction.");
-    }
-
-
-    // --- Load Compliance Rules (Placeholder) ---
-    let complianceResults = null;
-     try {
-      const ibcRules = require('@/data/ibc_rules.json');
-      complianceResults = [];
-      if (billOfMaterials) {
-         for (const item of billOfMaterials) {
-          const matchingRules = ibcRules.filter(rule => rule.component_type === item.item_name);
-          if (matchingRules.length > 0) {
-            for (const rule of matchingRules) {
-              let isCompliant = false; // Basic check
-              complianceResults.push({ item_name: item.item_name, standard: rule.standard, compliant: isCompliant, recommendation: rule.recommendation });
-            }
-          }
-        }
-      }
-      console.log('Compliance Results:', complianceResults);
-    } catch (complianceError) {
-      console.error('Compliance check error:', complianceError);
-    }
+    // --- REMOVED Synchronous BoM/Compliance Extraction ---
+    // These will be handled by the background task
 
 
     // --- Get User Session (if available) ---
@@ -231,17 +194,13 @@ export async function POST(request) {
     // --- Create Diagram record in MongoDB ---
     const diagramData = {
       fileName: fileName,
-      storagePath: storagePath, // Store GCS path
-      // geminiFileUri will be added later by the prepare endpoint
+      storagePath: storagePath,
+      // geminiFileUri, ocrText, extractedData, billOfMaterials, complianceResults will be added by background task
       fileType: fileType,
       fileSize: fileSize,
-      ocrText: ocrText,
-      extractedData: geminiResponse, // Store initial summary
-      billOfMaterials: billOfMaterials,
-      complianceResults: complianceResults,
       project: projectId,
       uploadedBy: userId, // Will be null for guest uploads
-      processingStatus: 'Uploaded', // Initial status
+      processingStatus: 'PENDING', // Set initial status to PENDING
     };
 
     // Add guestUploaderId if it's a guest upload
@@ -256,9 +215,16 @@ export async function POST(request) {
     // Add diagram reference to the Project document
     await Project.findByIdAndUpdate(projectId, { $push: { diagrams: newDiagram._id } });
 
-    console.log(`File ${fileName} saved to DB for project ${projectId}`);
+    console.log(`File ${fileName} saved to DB for project ${projectId} with status PENDING.`);
 
-    return NextResponse.json({ message: 'File uploaded successfully', diagramId: newDiagram._id }, { status: 200 });
+    // --- Trigger background preparation task (DO NOT await this) ---
+    prepareDiagramInBackground(newDiagram._id.toString())
+      .then(() => console.log(`Background preparation initiated for diagram ${newDiagram._id}`))
+      .catch(err => console.error(`Failed to initiate background preparation for diagram ${newDiagram._id}:`, err));
+    // --- End trigger ---
+
+    // Return immediately after saving and triggering
+    return NextResponse.json({ message: 'File upload accepted, processing started.', diagramId: newDiagram._id }, { status: 202 }); // Use 202 Accepted status
 
   } catch (error) {
     console.error('File upload error:', error);

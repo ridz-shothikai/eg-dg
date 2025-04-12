@@ -42,11 +42,19 @@ const DiagramSchema = new mongoose.Schema({
     index: true, // Index for efficient lookup during registration
     sparse: true, // Index only documents that have this field
   },
-  // Status of processing (e.g., Uploaded, OCR Pending, OCR Complete, Analysis Complete, Failed)
+  // Status of processing (e.g., PENDING, PROCESSING, ACTIVE, FAILED)
   processingStatus: {
     type: String,
-    enum: ['Uploaded', 'OCR Pending', 'OCR Complete', 'Analysis Pending', 'Analysis Complete', 'Failed'],
-    default: 'Uploaded',
+    // Added PENDING, PROCESSING, ACTIVE based on background task logic
+    enum: ['PENDING', 'PROCESSING', 'ACTIVE', 'FAILED', 'Uploaded', 'OCR Pending', 'OCR Complete', 'Analysis Pending', 'Analysis Complete'],
+    default: 'PENDING', // Default to PENDING now
+  },
+  // Store Gemini upload progress (0-100)
+  uploadProgress: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100,
   },
   // Store extracted OCR text (can be large, consider alternatives if needed)
   ocrText: {

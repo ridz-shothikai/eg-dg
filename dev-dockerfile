@@ -1,0 +1,16 @@
+FROM node:18
+
+WORKDIR /app
+
+# Install dependencies separately to benefit from Docker cache
+COPY package.json package-lock.json ./
+RUN npm install
+
+# Copy the rest of the project
+COPY . .
+
+# Expose the port Next.js runs on
+EXPOSE 3000
+
+# Use dev mode for hot reload
+CMD ["npm", "run", "dev"]

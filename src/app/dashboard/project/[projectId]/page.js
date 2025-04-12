@@ -1,14 +1,13 @@
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          'use client';
+'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import ChatInterface from '@/components/ChatInterface'; // Import the new component
-import { ArrowDownTrayIcon } from '@heroicons/react/24/outline'; // Import download icon
-// Removed ReactMarkdown import
-// Removed CopyIcon component definition
+import ChatInterface from '@/components/ChatInterface';
+import StatusProgressBar from '@/components/StatusProgressBar'; // Import the new component
+import { ArrowDownTrayIcon, ClockIcon, CheckCircleIcon, XCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -16,18 +15,20 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const [project, setProject] = useState(null);
   const [diagrams, setDiagrams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingProjectDetails, setLoadingProjectDetails] = useState(true); // Loading state for project details
+  const [loadingDiagrams, setLoadingDiagrams] = useState(true); // Loading state for initial diagrams
   const [error, setError] = useState(null);
-  const [preparationStatus, setPreparationStatus] = useState('loading');
+  // preparationStatus is derived dynamically from diagrams state
   const [chatHistory, setChatHistory] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatError, setChatError] = useState('');
   const [copiedIndex, setCopiedIndex] = useState(null);
-  const [initialSummary, setInitialSummary] = useState(null);
-  const [suggestedQuestions, setSuggestedQuestions] = useState([]);
-  const [guestId, setGuestId] = useState(null); // State for guest ID
-  const [isGuestMode, setIsGuestMode] = useState(false); // State to track guest mode
+  // Removed initialSummary and suggestedQuestions states, as prepare API no longer provides them
+  const [guestId, setGuestId] = useState(null);
+  const [isGuestMode, setIsGuestMode] = useState(false);
+  const [pollingIntervalId, setPollingIntervalId] = useState(null);
+  const [downloadingDiagramId, setDownloadingDiagramId] = useState(null); // State for download loading
 
   // Refactored Report States
   const [reportStates, setReportStates] = useState({
@@ -37,8 +38,8 @@ export default function ProjectDetailPage() {
   });
   const [activeReportType, setActiveReportType] = useState(null); // Track which report is currently running
 
-  // Removed chatContainerRef as it's now inside ChatInterface
   const eventSourceRef = useRef(null);
+  const reportWindowRef = useRef(null); // Ref to store the opened window
 
   // --- Helper to manage report state ---
   const updateReportState = (reportType, updates) => {
@@ -50,6 +51,28 @@ export default function ProjectDetailPage() {
 
   const startReport = (reportType) => {
     if (activeReportType) return false; // Prevent starting another if one is running
+
+    // --- Open blank window immediately on click ---
+    // Browsers generally allow this if it's synchronous with user interaction
+    try {
+        reportWindowRef.current = window.open('', '_blank');
+        if (!reportWindowRef.current) {
+             // window.open might return null if blocked despite being in handler
+             console.error("Failed to open report window. It might be blocked by the browser.");
+             // Optionally show an error message to the user here
+             setError("Could not open new tab. Please check your browser's popup blocker settings.");
+             return false; // Prevent further processing
+        }
+         // Optional: Add placeholder content
+         reportWindowRef.current.document.write('<p>Generating report, please wait...</p>');
+    } catch (e) {
+         console.error("Error opening report window:", e);
+         setError("An error occurred while trying to open the report tab.");
+         return false;
+    }
+    // --- End window open ---
+
+
     setActiveReportType(reportType);
     // Reset all errors, set loading and message for the specific report
     setReportStates(prev => {
@@ -88,21 +111,40 @@ export default function ProjectDetailPage() {
         // --- UPDATED: Check for public_url ---
         if (data.public_url) {
           updateReportState(reportType, { message: 'Report ready! Opening...' });
-          window.open(data.public_url, '_blank'); // Use public_url
-        } else { throw new Error("Public URL missing in complete event."); } // Updated error message
+          // --- Use reportWindowRef ---
+          if (reportWindowRef.current && !reportWindowRef.current.closed) {
+              reportWindowRef.current.location.href = data.public_url;
+          } else {
+              console.warn("Report window was closed before URL could be loaded. Opening new tab (might be blocked).");
+              // Fallback: Try opening directly (might be blocked)
+              window.open(data.public_url, '_blank');
+          }
+          reportWindowRef.current = null; // Clear ref
+        } else { throw new Error("Public URL missing in complete event."); }
         finishReport(reportType, true);
       } catch (e) {
          console.error(`Failed to handle SSE complete event for ${reportType}:`, e);
          updateReportState(reportType, { error: `Failed to process ${reportType.toUpperCase()} download link.` });
+         // Close blank window on error
+         if (reportWindowRef.current && !reportWindowRef.current.closed) {
+             reportWindowRef.current.close();
+         }
+         reportWindowRef.current = null;
          finishReport(reportType, false);
       }
   };
+
 
    const handleSseError = (event, reportType) => {
        console.error(`SSE error event for ${reportType}:`, event);
        let errorMessage = `${reportType.toUpperCase()} generation failed.`;
        if (event.data) { try { const d = JSON.parse(event.data); if (d.message) errorMessage = d.message; } catch (e) {} }
        updateReportState(reportType, { error: errorMessage });
+       // Close blank window on error
+       if (reportWindowRef.current && !reportWindowRef.current.closed) {
+           reportWindowRef.current.close();
+       }
+       reportWindowRef.current = null;
        finishReport(reportType, false);
     };
 
@@ -110,6 +152,11 @@ export default function ProjectDetailPage() {
         console.error(`${reportType} EventSource failed:`, err);
         if (activeReportType === reportType) { // Only set error if this report was active
              updateReportState(reportType, { error: `Connection error during ${reportType.toUpperCase()} generation.` });
+             // Close blank window on error
+             if (reportWindowRef.current && !reportWindowRef.current.closed) {
+                 reportWindowRef.current.close();
+             }
+             reportWindowRef.current = null;
              finishReport(reportType, false);
         }
          if (eventSourceRef.current) eventSourceRef.current.close();
@@ -137,129 +184,254 @@ export default function ProjectDetailPage() {
   }, [status, router]);
 
 
-  // Effect for fetching project data and triggering sync (updated for guest mode)
+  // Effect for fetching initial data (Split Fetch)
   useEffect(() => {
-    if (status === 'loading') return; // Wait until session status is determined
+    if (status === 'loading' || !projectId) return; // Wait for session and projectId
 
     // Determine if we should fetch (either authenticated or guest mode with guestId)
     const shouldFetch = status === 'authenticated' || (status === 'unauthenticated' && guestId);
+    if (!shouldFetch) return;
 
-    if (!shouldFetch) {
-        // If unauthenticated and guestId hasn't been set yet by the other effect, wait.
-        // If guestId check failed in the other effect, redirection already happened.
-        return;
+    let isMounted = true; // Prevent state updates on unmounted component
+
+    // Prepare headers once
+    const headers = {};
+    if (isGuestMode && guestId) {
+      headers['X-Guest-ID'] = guestId;
     }
 
-    async function fetchData() {
-      if (!projectId) return;
+    // --- Fetch Project Details First ---
+    const fetchProjectDetails = async () => {
+      console.log("Fetching project details...");
+      setLoadingProjectDetails(true);
+      setError(null);
       try {
-        setLoading(true); setError(null); setPreparationStatus('loading');
+        const response = await fetch(`/api/projects/${projectId}/prepare`, { headers }); // Prepare now only gets details
 
-        // Prepare headers: Add guest ID header if in guest mode
-        const headers = {};
-        if (isGuestMode && guestId) {
-          headers['X-Guest-ID'] = guestId;
-        }
-        // Note: next-auth session cookie is sent automatically by the browser
-
-        const response = await fetch(`/api/projects/${projectId}/prepare`, { headers });
+        if (!isMounted) return; // Check if component unmounted
 
         if (response.status === 401 || response.status === 403) {
-            // Handle unauthorized/forbidden, potentially redirect guest to login
-            setError("Access denied. Please log in or ensure you have access.");
-            setPreparationStatus('failed');
-            if (isGuestMode) {
-                // Maybe clear guestId if it's invalid for this project? Or just redirect.
-                router.push('/login?error=guest_access_denied');
-            } else {
-                 router.push('/login?error=auth_required');
-            }
-            return; // Stop further processing
+          setError("Access denied. Please log in or ensure you have access.");
+          if (isGuestMode) router.push('/login?error=guest_access_denied');
+          else router.push('/login?error=auth_required');
+          return;
         }
-
         if (!response.ok) { const d = await response.json().catch(()=>({})); throw new Error(d.message || `Failed: ${response.status}`); }
-        const data = await response.json();
-        setProject(data.project);
-        setDiagrams(data.diagrams || []);
-        setChatHistory(data.chatHistory || []);
-        setPreparationStatus(data.preparationStatus || 'failed');
-        setInitialSummary(data.initialSummary || null); // Set initial summary
-        setSuggestedQuestions(data.suggestedQuestions || []); // Set suggested questions
 
-        if (data.diagrams?.length > 0) {
-          console.log("Triggering background file sync...");
-          // Add headers to the sync-files call
-          fetch(`/api/projects/${projectId}/sync-files`, { method: 'POST', headers: headers })
-            .then(async (res) => { const d=await res.json().catch(()=>({})); if(res.ok) console.log(`Sync: ${d.synced} synced, ${d.skipped} skipped, ${d.errors} errors`); else console.error(`Sync failed: ${d.message||res.statusText}`); })
-            .catch(err => console.error("Sync trigger error:", err));
+        const data = await response.json();
+        if (isMounted) {
+            setProject(data.project);
+            setChatHistory(data.chatHistory || []);
+            console.log("Project details loaded.");
         }
       } catch (err) {
-          console.error('Prep error:', err);
-          setPreparationStatus('failed');
-          setError(err.message || "Failed to load project data.");
+        console.error('Error fetching project details:', err);
+        if (isMounted) setError(err.message || "Failed to load project details.");
       } finally {
-          setLoading(false);
+        if (isMounted) setLoadingProjectDetails(false);
       }
+    };
+
+    // --- Fetch Initial Diagram Statuses (After Project Details) ---
+    const fetchInitialDiagrams = async () => {
+        console.log("Fetching initial diagram statuses...");
+        setLoadingDiagrams(true);
+        // Don't reset main error here, keep project details error if it occurred
+        try {
+            const response = await fetch(`/api/projects/${projectId}/diagram-statuses`, { headers });
+
+            if (!isMounted) return;
+
+            // Handle auth errors specifically if needed, though prepare should catch it first
+            if (response.status === 401 || response.status === 403) {
+                 console.error("Diagram status fetch forbidden/unauthorized (should have been caught by prepare).");
+                 // setError("Access denied fetching diagram statuses."); // Avoid overwriting main error
+                 return;
+            }
+            if (!response.ok) { const d = await response.json().catch(()=>({})); throw new Error(d.message || `Failed: ${response.status}`); }
+
+            const initialDiagrams = await response.json();
+            if (isMounted) {
+                setDiagrams(initialDiagrams || []);
+                console.log("Initial diagram statuses loaded.");
+
+                // Start polling only if needed
+                const needsPolling = initialDiagrams.some(d => d.processingStatus === 'PENDING' || d.processingStatus === 'PROCESSING');
+                if (needsPolling && !pollingIntervalId) {
+                    console.log("Starting status polling...");
+                    startPolling(headers);
+                } else if (!needsPolling) {
+                    console.log("No polling needed (all diagrams processed or failed).");
+                }
+
+                // Trigger GCS sync (can remain as is)
+                if (initialDiagrams.length > 0) {
+                  console.log("Triggering background file sync...");
+                  fetch(`/api/projects/${projectId}/sync-files`, { method: 'POST', headers: headers })
+                    .then(async (res) => { const d=await res.json().catch(()=>({})); if(res.ok) console.log(`Sync: ${d.synced} synced, ${d.skipped} skipped, ${d.errors} errors`); else console.error(`Sync failed: ${d.message||res.statusText}`); })
+                    .catch(err => console.error("Sync trigger error:", err));
+                }
+            }
+        } catch (err) {
+             console.error('Error fetching initial diagram statuses:', err);
+             if (isMounted) setError(err.message || "Failed to load diagram list."); // Set error if diagram fetch fails
+        } finally {
+             if (isMounted) setLoadingDiagrams(false);
+        }
+    };
+
+    // Chain the fetches
+    fetchProjectDetails().then(() => {
+        // Fetch diagrams only if project details loaded successfully and component still mounted
+        if (isMounted && !error) {
+            fetchInitialDiagrams();
+        }
+    });
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      // Stop polling is handled in its own useEffect cleanup
+    };
+
+  }, [projectId, status, guestId, isGuestMode, router]); // Dependencies for fetching
+
+
+  // --- Status Polling Logic ---
+  const startPolling = (authHeaders) => {
+    // Clear any existing interval
+    if (pollingIntervalId) clearInterval(pollingIntervalId);
+
+    const interval = setInterval(async () => {
+      if (!projectId) return; // Should not happen, but safeguard
+      // console.log("Polling for diagram statuses..."); // Can be noisy
+      try {
+        const response = await fetch(`/api/projects/${projectId}/diagram-statuses`, { headers: authHeaders });
+        if (!response.ok) {
+          // Handle polling errors differently? Maybe stop polling on auth errors?
+          console.error(`Polling error: ${response.status}`);
+          if (response.status === 401 || response.status === 403) {
+             console.error("Polling failed due to auth error. Stopping polling.");
+             stopPolling();
+          }
+          return; // Don't update state on error
+        }
+        const latestStatuses = await response.json();
+
+        let allDone = true;
+        setDiagrams(currentDiagrams => {
+          // Create a map for efficient lookup
+          const statusMap = latestStatuses.reduce((map, item) => {
+            map[item._id] = item.processingStatus;
+            return map;
+          }, {});
+
+          // Update existing diagrams, check if polling should continue
+          const updatedDiagrams = currentDiagrams.map(diag => {
+            const latestData = latestStatuses.find(s => s._id === diag._id); // Find full data
+            if (latestData) {
+                // Update status if changed
+                if (latestData.processingStatus !== diag.processingStatus) {
+                    // console.log(`Updating status for ${diag.fileName} from ${diag.processingStatus} to ${latestData.processingStatus}`);
+                    diag.processingStatus = latestData.processingStatus;
+                }
+                // Update progress if changed (and relevant)
+                if (diag.processingStatus === 'PROCESSING' && typeof latestData.uploadProgress === 'number' && latestData.uploadProgress !== diag.uploadProgress) {
+                    diag.uploadProgress = latestData.uploadProgress;
+                }
+            }
+
+            // Check if this diagram still needs polling
+            if (diag.processingStatus === 'PENDING' || diag.processingStatus === 'PROCESSING') {
+              allDone = false;
+            }
+            return diag;
+          });
+
+          if (allDone) {
+            console.log("All diagrams processed. Stopping polling.");
+            stopPolling();
+          }
+
+          return updatedDiagrams; // Return the updated array
+        });
+
+      } catch (err) {
+        console.error("Error during status polling fetch:", err);
+        // Maybe stop polling after several consecutive errors?
+      }
+    }, 5000); // Poll every 5 seconds
+
+    setPollingIntervalId(interval);
+  };
+
+  const stopPolling = () => {
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      setPollingIntervalId(null);
+      console.log("Status polling stopped.");
+    }
+  };
+
+  // Cleanup polling on component unmount
+  useEffect(() => {
+    return () => {
+      stopPolling(); // Clear interval on unmount
+      if (eventSourceRef.current) eventSourceRef.current.close(); // Also cleanup SSE if any
+    };
+  }, [pollingIntervalId]); // Depend on pollingIntervalId to ensure cleanup happens correctly
+
+
+  // --- Chat Input Width Tracking ---
+  const chatContainerRef = useRef(null);
+  const [chatAreaWidthState, setChatAreaWidthState] = useState(0);
+
+  useEffect(() => {
+    let attempts = 0;
+    const maxAttempts = 50;
+    let intervalId = null; // Define intervalId within the effect scope
+
+    const handleResize = () => {
+      if (chatContainerRef.current) {
+        const width = chatContainerRef.current.offsetWidth;
+        if (width > 0) {
+          setChatAreaWidthState(width);
+          if (intervalId) clearInterval(intervalId); // Stop retrying once we have a valid width
+        }
+      }
+    };
+
+    // Initial check
+    handleResize();
+
+    // Retry if initial check failed
+    if (chatAreaWidthState === 0) {
+        intervalId = setInterval(() => {
+            attempts++;
+            handleResize();
+
+            if (attempts >= maxAttempts || chatAreaWidthState > 0) {
+                clearInterval(intervalId);
+                if (chatAreaWidthState === 0) {
+                     console.warn(`Unable to get valid chat container width after ${maxAttempts} attempts.`);
+                }
+            }
+        }, 350);
     }
 
-    fetchData();
-    // Depend on guestId as well, so fetch runs when guestId is set
-  }, [projectId, status, router, guestId, isGuestMode]);
+    // Listen to window resize events as well
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [chatContainerRef, chatAreaWidthState]); // Re-run if chatAreaWidthState changes (e.g., on resize)
 
 
-  // Removed chat scroll effect, now handled in ChatInterface
-
-  // Cleanup EventSource on component unmount
-  useEffect(() => {
-    return () => { if (eventSourceRef.current) eventSourceRef.current.close(); };
-  }, []);
-
-
-  // for chat input - tracks width dynamically
-    const chatContainerRef = useRef(null);
-    const [chatAreaWidthState, setChatAreaWidthState] = useState(0);
-
-    useEffect(() => {
-      let attempts = 0;
-      const maxAttempts = 50;
-    
-      const handleResize = () => {
-        if (chatContainerRef.current) {
-          const width = chatContainerRef.current.offsetWidth;
-          if (width > 0) {
-            setChatAreaWidthState(width);
-            clearInterval(intervalId); // Stop retrying once we have a valid width
-          }
-        }
-      };
-    
-      // Try every second, up to 5 times
-      const intervalId = setInterval(() => {
-        attempts++;
-        handleResize();
-    
-        if (attempts >= maxAttempts) {
-          clearInterval(intervalId);
-          if (!chatContainerRef.current || chatContainerRef.current.offsetWidth === 0) {
-            console.warn("Unable to get valid chat container width after 5 attempts.");
-          }
-        }
-      }, 350);
-    
-      // Listen to window resize events as well
-      window.addEventListener("resize", handleResize);
-    
-      return () => {
-        clearInterval(intervalId);
-        window.removeEventListener("resize", handleResize);
-      };
-    }, [chatContainerRef]);
-    
-
-  // --- Report Download Handlers ---
+  // --- Report Download Handlers (No changes needed here, they use SSE) ---
   const handleOcrDownload = () => {
     if (!startReport('ocr')) return;
-    // Append guestId if in guest mode
     const url = isGuestMode && guestId
       ? `/api/projects/${projectId}/reports/ocr?guestId=${guestId}`
       : `/api/projects/${projectId}/reports/ocr`;
@@ -273,7 +445,6 @@ export default function ProjectDetailPage() {
 
   const handleBomDownload = () => {
     if (!startReport('bom')) return;
-    // Append guestId if in guest mode
     const url = isGuestMode && guestId
       ? `/api/projects/${projectId}/reports/bom?guestId=${guestId}`
       : `/api/projects/${projectId}/reports/bom`;
@@ -287,11 +458,10 @@ export default function ProjectDetailPage() {
 
   const handleComplianceDownload = () => {
       if (!startReport('compliance')) return;
-      // Append guestId if in guest mode
       const url = isGuestMode && guestId
         ? `/api/projects/${projectId}/reports/compliance?guestId=${guestId}`
         : `/api/projects/${projectId}/reports/compliance`;
-      const eventSource = new EventSource(url); // Point to compliance route with potential query param
+      const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
       eventSource.onmessage = (e) => handleSseMessage(e, 'compliance');
       eventSource.addEventListener('complete', (e) => handleSseComplete(e, 'compliance'));
@@ -300,22 +470,28 @@ export default function ProjectDetailPage() {
   };
   // --- End Report Download Handlers ---
 
+  // --- Derive overall status for enabling chat ---
+  const isProjectReadyForChat = diagrams.length > 0 &&
+                                diagrams.every(d => d.processingStatus === 'ACTIVE' || d.processingStatus === 'FAILED') && // All are done processing
+                                diagrams.some(d => d.processingStatus === 'ACTIVE'); // At least one is active
+
 
   const handleSendMessage = async () => {
-    if (!chatInput.trim() || isChatLoading || preparationStatus !== 'ready') return;
+    // Use derived status to check if chat is ready
+    if (!chatInput.trim() || isChatLoading || !isProjectReadyForChat) return;
 
     const userMessage = { role: 'user', text: chatInput };
-    const currentInput = chatInput; // Store input before clearing
-    setChatInput(''); // Clear input immediately
+    const currentInput = chatInput;
+    setChatInput('');
 
-    // Add user message and a placeholder for the model's streaming response
+    // Add user message and placeholder
     const modelPlaceholderIndex = chatHistory.length + 1;
     setChatHistory(prev => [...prev, userMessage, { role: 'model', text: '' }]);
     setIsChatLoading(true);
     setChatError('');
 
     try {
-      // Prepare headers: Add guest ID header if in guest mode
+      // Prepare headers
       const headers = { 'Content-Type': 'application/json' };
       if (isGuestMode && guestId) {
         headers['X-Guest-ID'] = guestId;
@@ -324,16 +500,14 @@ export default function ProjectDetailPage() {
       const response = await fetch(`/api/chat/${projectId}`, {
         method: 'POST',
         headers: headers,
-        // Send previous history excluding the placeholder we just added
-        body: JSON.stringify({ message: currentInput, history: chatHistory.slice(-6) })
+        body: JSON.stringify({ message: currentInput, history: chatHistory.slice(-6) }) // Send recent history
       });
 
        if (response.status === 401 || response.status === 403) {
-           throw new Error("Access denied. Please log in."); // Simplified error for chat
+           throw new Error("Access denied. Please log in.");
        }
 
       if (!response.ok) {
-        // Try to get error message from JSON, fallback to status text
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `Request failed: ${response.statusText}`);
       }
@@ -342,31 +516,22 @@ export default function ProjectDetailPage() {
       if (!response.body) {
         throw new Error("Streaming response not supported or body is missing.");
       }
-
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let accumulatedText = ""; // Keep track locally if needed, but primarily update state
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
-          accumulatedText += chunk; // Accumulate locally if needed for final save check
-          // Update the placeholder message in the state
           setChatHistory(prev => {
             const newHistory = [...prev];
-            // Ensure the placeholder exists before trying to update
             if (newHistory[modelPlaceholderIndex] && newHistory[modelPlaceholderIndex].role === 'model') {
                  newHistory[modelPlaceholderIndex] = { ...newHistory[modelPlaceholderIndex], text: newHistory[modelPlaceholderIndex].text + chunk };
             } else {
-                // Handle edge case where placeholder might not be there (shouldn't happen with current logic)
                 console.warn("Model placeholder not found at index", modelPlaceholderIndex);
-                // Optionally add a new message if placeholder is missing
-                // newHistory.push({ role: 'model', text: chunk });
             }
-
             return newHistory;
           });
         }
@@ -376,58 +541,113 @@ export default function ProjectDetailPage() {
     } catch (err) {
       console.error('Chat error:', err);
       setChatError(err.message);
-      // Optionally remove the placeholder if an error occurred before any response
-      setChatHistory(prev => prev.filter((_, index) => index !== modelPlaceholderIndex || prev[modelPlaceholderIndex]?.text));
+      setChatHistory(prev => prev.filter((_, index) => index !== modelPlaceholderIndex || prev[modelPlaceholderIndex]?.text)); // Remove placeholder on error
     } finally {
       setIsChatLoading(false);
-      // Auto-scroll is now handled within ChatInterface
     }
   };
 
-  // Function to handle copying text
+  // Function to handle copying text (no changes needed)
   const handleCopy = (text, index) => {
     navigator.clipboard.writeText(text).then(() => {
-      setCopiedIndex(index); // Set the index of the copied message
-      setTimeout(() => setCopiedIndex(null), 1500); // Reset after 1.5 seconds
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex(null), 1500);
     }).catch(err => {
       console.error('Failed to copy text: ', err);
     });
   };
 
-  // --- Handler for Suggested Question Click ---
+  // --- Handler for Suggested Question Click (No changes needed, uses isProjectReadyForChat check) ---
   const handleSuggestionClick = (question) => {
-    if (isChatLoading || preparationStatus !== 'ready') return; // Don't allow if chat is busy or not ready
+    if (isChatLoading || !isProjectReadyForChat) return;
     setChatInput(question);
-    // Use a timeout to allow state to update before sending message
-    // Need to call handleSendMessage defined in this component
-    setTimeout(() => {
-        handleSendMessage();
-    }, 0);
+    // Use timeout to ensure state updates before sending
+    setTimeout(handleSendMessage, 0);
   };
   // --- End Handler ---
 
+  // --- Handler for Diagram Download Click ---
+  const handleDownloadClick = async (diagramId) => {
+    if (downloadingDiagramId) return; // Prevent multiple clicks
+
+    setDownloadingDiagramId(diagramId);
+    // Optionally clear a specific download error state if you add one
+    // setError(null);
+
+    try {
+      // Prepare headers for auth/guest
+      const headers = {};
+      if (isGuestMode && guestId) {
+        headers['X-Guest-ID'] = guestId;
+      }
+
+      const response = await fetch(`/api/diagrams/${diagramId}/download-url`, { headers });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to get download URL: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data.signedUrl) {
+        // Use the signed URL to trigger download
+        // Using window.location.href works well for forcing download via content-disposition
+        window.location.href = data.signedUrl;
+      } else {
+        throw new Error("Signed URL not received from server.");
+      }
+
+    } catch (err) {
+      console.error('Download error:', err);
+      // Set a general error or a specific download error state
+      setError(`Failed to download file: ${err.message}`);
+    } finally {
+      setDownloadingDiagramId(null); // Reset loading state for this diagram
+    }
+  };
+  // --- End Download Handler ---
+
+
+  // --- Helper to get status indicator (Icon, color, text) ---
+  // Now returns component for progress bar if needed
+  const getStatusIndicator = (status, progress = 0) => {
+    switch (status) {
+      case 'PENDING':
+        // Show 0% progress bar for pending
+        return { Component: () => <StatusProgressBar progress={0} />, color: 'text-gray-400', text: 'Pending (0%)' };
+      case 'PROCESSING':
+        // Show progress bar based on uploadProgress
+        return { Component: () => <StatusProgressBar progress={progress} />, color: 'text-blue-400', text: `Processing (${Math.round(progress)}%)` };
+      case 'ACTIVE':
+        return { Component: CheckCircleIcon, color: 'text-green-400', text: 'Ready' };
+      case 'FAILED':
+        return { Component: XCircleIcon, color: 'text-red-400', text: 'Failed' };
+      default:
+        return { Component: ExclamationCircleIcon, color: 'text-yellow-400', text: 'Unknown' };
+    }
+  };
+
   // --- Render Logic ---
-  // Show specific loading state while guestId is being checked
+  // Show checking guest access state
   if (status === 'unauthenticated' && !guestId && !error) {
      return <div className="w-full h-full flex items-center justify-center bg-gray-900"><LoadingSpinner text="Checking guest access..." size="md" /></div>;
   }
 
-  if (loading || status === 'loading') return <div className="w-full h-full flex items-center justify-center bg-gray-900"><LoadingSpinner text="Loading project..." size="md" /></div>;
+  // Show error if any occurred during fetches
   if (error) return <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white p-4 text-center">Error: {error}</div>;
+
+  // Show loading state only if project details haven't loaded yet
+  if (loadingProjectDetails) return <div className="w-full h-full flex items-center justify-center bg-gray-900"><LoadingSpinner text="Loading project details..." size="md" /></div>;
+
+  // If project details failed but no general error (shouldn't happen with current logic, but safe)
   if (!project) return <div className="w-full h-full flex items-center justify-center bg-gray-900 text-white">Project data unavailable.</div>;
 
-
+  // Render the main layout once project details are available
   return (
-    // Reverted: Removed h-full. Relying on flex-grow from layout.
-    // Added bg-gray-900 to the main container to ensure consistent background
-    // Removed Guest Mode Banner - Moved to layout
     <div className="flex flex-col md:flex-row relative flex-grow bg-gray-900">
 
       {/* Left Column */}
-      {/* Removed conditional padding pt-12 - now handled by layout */}
       <div className={`w-full md:w-1/3 lg:w-1/4 p-4 border-r border-gray-700 flex flex-col space-y-6 bg-gray-900`}>
-
-        {/* --- REORDERED SECTIONS --- */}
 
         {/* 1. Project Files Header & Upload Button */}
         <div>
@@ -439,8 +659,8 @@ export default function ProjectDetailPage() {
           </Link>
         </div>
 
-        {/* 2. Project Reports Section */}
-        {diagrams.length > 0 && (
+        {/* 2. Project Reports Section (Show only if diagrams exist) */}
+        {!loadingDiagrams && diagrams.length > 0 && (
           <div>
              <h2 className="text-xl font-semibold mb-3 text-white">Project Reports</h2>
              {(reportStates.ocr.error || reportStates.bom.error || reportStates.compliance.error) &&
@@ -449,102 +669,84 @@ export default function ProjectDetailPage() {
                </p>
              }
              <div className="flex flex-col space-y-2">
-               {/* OCR Button */}
-               <button
-                 onClick={handleOcrDownload}
-                 className={`bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[36px] relative`}
-                 disabled={!!activeReportType}
-               >
-                 {activeReportType === 'ocr' ? (
-                   <div className="flex items-center justify-center space-x-2">
-                     <LoadingSpinner size="sm" text={null} />
-                     <span>{reportStates.ocr.message || "Generating..."}</span>
-                   </div>
-                 ) : ( 'Detailed Overview Download' )}
+               <button onClick={handleOcrDownload} className={`bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[36px] relative`} disabled={!!activeReportType}>
+                 {activeReportType === 'ocr' ? (<div className="flex items-center justify-center space-x-2"><LoadingSpinner size="sm" text={null} /><span>{reportStates.ocr.message || "Generating..."}</span></div>) : ( 'Detailed Overview Download' )}
                </button>
-               {/* BoM Button */}
-               <button
-                 onClick={handleBomDownload}
-                 className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[36px] relative"
-                 disabled={!!activeReportType}
-               >
-                  {activeReportType === 'bom' ? (
-                   <div className="flex items-center justify-center space-x-2">
-                     <LoadingSpinner size="sm" text={null} />
-                     <span>{reportStates.bom.message || "Generating..."}</span>
-                   </div>
-                 ) : ( 'BoM Download' )}
+               <button onClick={handleBomDownload} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[36px] relative" disabled={!!activeReportType}>
+                  {activeReportType === 'bom' ? (<div className="flex items-center justify-center space-x-2"><LoadingSpinner size="sm" text={null} /><span>{reportStates.bom.message || "Generating..."}</span></div>) : ( 'BoM Download' )}
                </button>
-               {/* Compliance Button */}
-               <button
-                 onClick={handleComplianceDownload}
-                 className="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[36px] relative"
-                 disabled={!!activeReportType}
-               >
-                  {activeReportType === 'compliance' ? (
-                   <div className="flex items-center justify-center space-x-2">
-                     <LoadingSpinner size="sm" text={null} />
-                     <span>{reportStates.compliance.message || "Generating..."}</span>
-                   </div>
-                 ) : ( 'Compliance Download' )}
+               <button onClick={handleComplianceDownload} className="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded text-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[36px] relative" disabled={!!activeReportType}>
+                  {activeReportType === 'compliance' ? (<div className="flex items-center justify-center space-x-2"><LoadingSpinner size="sm" text={null} /><span>{reportStates.compliance.message || "Generating..."}</span></div>) : ( 'Compliance Download' )}
                </button>
              </div>
            </div>
          )}
 
-        {/* 3. Uploaded Files List (Scrollable) */}
-        {/* Added wrapper div with max-height and overflow for independent scrolling */}
-        <div className="flex-grow overflow-y-auto max-h-80 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800 scrollbar-thumb-rounded pr-1"> {/* Added padding-right for scrollbar space */}
-          {diagrams.length > 0 ? (
+        {/* 3. Uploaded Files List (Show loading or content) */}
+        <div className="flex-grow overflow-y-auto max-h-80 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800 scrollbar-thumb-rounded pr-1">
+          {loadingDiagrams ? (
+             <div className="flex justify-center items-center h-full">
+                <LoadingSpinner text="Loading files..." size="sm" />
+             </div>
+          ) : diagrams.length > 0 ? (
             <ul className="space-y-2">
-              {/* Added index to map for serial number */}
               {diagrams.map((diagram, index) => {
-                // --- TEMPORARY DEBUGGING: Log diagram object ---
-                console.log(`Rendering Diagram ${index + 1}:`, diagram);
-                // --- END DEBUGGING ---
+                // Pass progress to helper
+                const { Component: StatusComponent, color: statusColor, text: statusText } = getStatusIndicator(diagram.processingStatus, diagram.uploadProgress);
                 return (
-                  // Added relative positioning for absolute positioned elements inside
                   <li key={diagram._id} className="bg-gray-700 p-3 rounded relative flex justify-between items-start">
-                      {/* Serial Number (Top-Left) */}
-                  <span className="absolute top-1 left-1 text-xs font-mono text-gray-400 bg-gray-800 px-1 rounded-sm">
-                    {index + 1}
-                  </span>
-                  {/* File Info (Main Area) - Added padding-left to avoid overlap */}
-                  <div className="pl-5 flex-grow mr-2"> {/* Added margin-right for spacing */}
-                    {/* Removed 'truncate' class to allow wrapping */}
-                    <p className="font-medium text-sm mb-1 text-white break-words" title={diagram.fileName}>{diagram.fileName}</p> {/* Added break-words for safety */}
-                    <p className="text-xs text-gray-400">{new Date(diagram.createdAt).toLocaleDateString()}</p>
-                  </div>
-                  {/* Download Icon (Top-Right) - Ensuring this section is present */}
-                  {diagram.gcsUrl && ( // Only show if URL exists
-                    <a
-                      href={diagram.gcsUrl}
-                      download={diagram.fileName}
-                      target="_blank" // Good practice for external links/downloads
-                      rel="noopener noreferrer"
-                      className="absolute top-1 right-1 text-gray-400 hover:text-white transition-colors"
-                      title={`Download ${diagram.fileName}`}
-                    >
-                      <ArrowDownTrayIcon className="w-5 h-5" />
-                    </a>
-                  )}
+                    <span className="absolute top-1 left-1 text-xs font-mono text-gray-400 bg-gray-800 px-1 rounded-sm">
+                      {index + 1}
+                    </span>
+                    {/* Added overflow-hidden to this div */}
+                    <div className="pl-5 flex-grow mr-2 overflow-hidden">
+                      <p className="font-medium text-sm mb-1 text-white break-words" title={diagram.fileName}>{diagram.fileName}</p>
+                      {/* Status Indicator Area */}
+                      <div className={`flex items-center text-xs ${statusColor} mt-1`}>
+                        {/* Render Icon or Progress Bar */}
+                        {diagram.processingStatus === 'PENDING' || diagram.processingStatus === 'PROCESSING' ? (
+                           <div className="w-full mr-2"> {/* Container for progress bar */}
+                             <StatusComponent />
+                           </div>
+                        ) : (
+                           <StatusComponent className="w-3 h-3 mr-1 flex-shrink-0" /> // Render icon directly
+                        )}
+                        <span className="whitespace-nowrap">{statusText}</span>
+                      </div>
+                    </div>
+                    {/* Download Button/Icon Area */}
+                    <div className="absolute top-1 right-1">
+                      {diagram.processingStatus === 'ACTIVE' ? (
+                        downloadingDiagramId === diagram._id ? (
+                          <span className="text-gray-400 text-xs px-1">...</span> // Show "..." instead of spinner
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault(); // Prevent any default link behavior if using <a>
+                              handleDownloadClick(diagram._id);
+                            }}
+                            disabled={!!downloadingDiagramId} // Disable all download buttons while one is active
+                            className="text-gray-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={`Download ${diagram.fileName}`}
+                          >
+                            <ArrowDownTrayIcon className="w-5 h-5" />
+                          </button>
+                        )
+                      ) : null /* Don't show download icon if not ACTIVE */}
+                    </div>
                   </li>
                 );
               })}
             </ul>
           ) : (
-            <p className="text-gray-400 text-sm">No diagrams uploaded yet.</p>
+             <p className="text-gray-400 text-sm text-center mt-4">No diagrams uploaded yet.</p>
           )}
         </div>
-        {/* --- END REORDERED SECTIONS --- */}
       </div>
 
-      {/* Right Column: Chat Interface - Use flex-grow to allow ChatInterface to fill height */}
-      {/* Removed conditional padding pt-12 - now handled by layout */}
+      {/* Right Column: Chat Interface (Rendered once project details are loaded) */}
       <div ref={chatContainerRef} className={`w-full md:w-2/3 lg:w-3/4 p-6 flex flex-col bg-gray-900`}>
-         {/* Ensure heading is white */}
         <h2 className="text-2xl font-semibold mb-4 text-white flex-shrink-0">Chat for Insights</h2>
-        {/* Render ChatInterface component and pass props */}
         <ChatInterface
           chatHistory={chatHistory}
           chatInput={chatInput}
@@ -552,14 +754,19 @@ export default function ProjectDetailPage() {
           onSendMessage={handleSendMessage}
           isChatLoading={isChatLoading}
           chatError={chatError}
-          initialSummary={initialSummary}
-          suggestedQuestions={suggestedQuestions}
+          initialSummary={null} // No longer provided by prepare
+          suggestedQuestions={[]} // No longer provided by prepare
           onSuggestionClick={handleSuggestionClick}
-          preparationStatus={preparationStatus}
+          preparationStatus={ // Pass derived status
+            diagrams.length === 0 ? 'no_files' :
+            diagrams.some(d => d.processingStatus === 'PENDING' || d.processingStatus === 'PROCESSING') ? 'processing' :
+            diagrams.every(d => d.processingStatus === 'ACTIVE' || d.processingStatus === 'FAILED') ? (diagrams.some(d => d.processingStatus === 'ACTIVE') ? 'ready' : 'failed') :
+            'unknown' // Fallback
+          }
           copiedIndex={copiedIndex}
           onCopy={handleCopy}
           chatAreaWidthState={chatAreaWidthState}
-          isGuestMode={isGuestMode} // Pass guest mode status
+          isGuestMode={isGuestMode}
         />
       </div>
     </div>

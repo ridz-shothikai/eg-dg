@@ -75,50 +75,67 @@ export default function HomePage() {
       if (!projectId) throw new Error('Project ID not received after creation.');
       console.log('Project created:', projectId);
       setUploadStep(1); // Move to step 1: Uploading Files
+      setUploadProgressText(`Uploading ${numFiles} file(s)...`); // Update progress text for parallel upload
 
-      // Step 2: Upload each file sequentially - WITH RETRY
-      const uploadErrors = [];
-      for (let i = 0; i < numFiles; i++) {
-        const currentFile = files[i];
-        const baseUploadText = `Uploading file ${i + 1} of ${numFiles}: ${currentFile.name}`;
-        setUploadProgressText(baseUploadText);
-        console.log(`Uploading file ${i + 1}/${numFiles}: ${currentFile.name}`);
+      // Step 2: Upload all files in parallel using Promise.allSettled - WITH RETRY
+      const uploadPromises = Array.from(files).map(async (currentFile) => {
+        const baseUploadText = `Uploading ${currentFile.name}`; // Simpler text for parallel
+        console.log(`Starting upload for: ${currentFile.name}`);
         const formData = new FormData();
         formData.append('file', currentFile);
         formData.append('projectId', projectId);
 
         try {
+          // Note: The retry progress text won't be very useful here as multiple might retry at once.
+          // We'll rely on the final settled status.
           const uploadResponse = await fetchWithRetry(
             '/api/upload',
             { method: 'POST', body: formData },
             3, // maxRetries
-            (attempt, max) => { // onRetry callback
-              setUploadProgressText(`${baseUploadText} (Retrying ${attempt}/${max})...`);
-            }
+             // No specific per-file retry text update needed in parallel mode for simplicity
+            (attempt, max) => { console.log(`Retrying upload for ${currentFile.name} (${attempt}/${max})`); }
           );
-
-          // Reset progress text for the next file or final step
-           setUploadProgressText(baseUploadText); // Show base text again after retries finish (success or fail)
 
           if (!uploadResponse.ok) {
             const errorData = await uploadResponse.json().catch(() => ({}));
+            // Throw an error to make the promise reject
             throw new Error(errorData.message || `Upload failed for ${currentFile.name} after retries (Status: ${uploadResponse.status})`);
           }
+          const result = await uploadResponse.json(); // Assuming API returns some useful data on success
           console.log(`File ${currentFile.name} uploaded successfully.`);
+          // Return necessary info for successful uploads if needed later
+          return { fileName: currentFile.name, status: 'fulfilled', value: result };
         } catch (fileUploadError) {
           console.error(`Error uploading ${currentFile.name} after retries:`, fileUploadError);
-          uploadErrors.push(`${currentFile.name}: ${fileUploadError.message}`);
-          // Continue to next file even if one fails after retries
+          // Throw the error again or return a specific structure for rejected promises
+          // Promise.allSettled expects the promise to reject on failure
+           throw { fileName: currentFile.name, status: 'rejected', reason: fileUploadError.message };
         }
-      }
+      });
+
+      // Wait for all upload promises to settle (either succeed or fail)
+      const results = await Promise.allSettled(uploadPromises);
+
+      const failedUploads = results.filter(result => result.status === 'rejected');
+      const successfulUploads = results.filter(result => result.status === 'fulfilled');
+
+      console.log(`Uploads settled. Successful: ${successfulUploads.length}, Failed: ${failedUploads.length}`);
 
       // Handle upload errors if any occurred
-      if (uploadErrors.length > 0) {
-        // Combine errors into a single message or handle differently
-        throw new Error(`Some files failed to upload:\n${uploadErrors.join('\n')}`);
+      if (failedUploads.length > 0) {
+        const errorMessages = failedUploads.map(f => `${f.reason?.fileName || 'Unknown file'}: ${f.reason?.reason || 'Unknown error'}`);
+        console.error(`Some files failed to upload:\n${errorMessages.join('\n')}`);
+        // Set a general error state - ideally, pass failed file info to the dashboard
+        setUploadError(`Failed to upload ${failedUploads.length} file(s). Check console for details.`);
+        // Continue to dashboard even with partial success
       }
 
-      console.log('All files uploaded successfully.');
+      if (successfulUploads.length === 0 && failedUploads.length > 0) {
+         // If ALL uploads failed after creating project, stop here.
+         throw new Error(`All ${failedUploads.length} file uploads failed.`);
+      }
+
+      console.log('Proceeding to workspace preparation.');
       setUploadStep(2); // Move to step 2: Preparing Workspace
       setUploadProgressText('Preparing workspace...'); // Update text
 
@@ -126,6 +143,7 @@ export default function HomePage() {
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Updated router push to use /dashboard prefix
+      // TODO: Consider passing failedUploads info via router state or query params if needed on dashboard
       router.push(`/dashboard/project/${projectId}`);
     } catch (error) {
       console.error('Guest upload process failed:', error);

@@ -166,7 +166,7 @@ export default function ProjectDetailPage() {
         if (response.status === 401 || response.status === 403) {
             // Handle unauthorized/forbidden, potentially redirect guest to login
             setError("Access denied. Please log in or ensure you have access.");
-            setPreparationStatus('failed');
+            // setPreparationStatus('failed'); // Removed call
             if (isGuestMode) {
                 // Maybe clear guestId if it's invalid for this project? Or just redirect.
                 router.push('/login?error=guest_access_denied');
@@ -194,7 +194,7 @@ export default function ProjectDetailPage() {
         }
       } catch (err) {
           console.error('Prep error:', err);
-          setPreparationStatus('failed');
+          // setPreparationStatus('failed'); // Removed call
           setError(err.message || "Failed to load project data.");
       } finally {
           setLoading(false);
