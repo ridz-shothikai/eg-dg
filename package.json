@@ -16,6 +16,8 @@
     "@sparticuz/chromium": "^133.0.0",
     "axios": "^1.8.4",
     "bcryptjs": "^3.0.2",
+    "emitter": "^0.0.5",
+    "html-pdf-node": "^1.0.8",
     "mime-types": "^3.0.1",
     "mongoose": "^8.13.0",
     "next": "15.2.4",

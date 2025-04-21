@@ -1,5 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"; // Assuming this might be needed if model passed differently later
-
 // Utility function for Gemini generateContent with retry logic
 
 /**
@@ -11,77 +9,99 @@ import { GoogleGenerativeAI } from "@google/generative-ai"; // Assuming this mig
  * @returns {Promise<GenerateContentResult>} The result from Gemini.
  * @throws {Error} Throws an error if the call fails after all retries or encounters a non-retryable error.
  */
-export const generateContentWithRetry = async (geminiModel, request, maxRetries = 3, onRetry) => {
+export const generateContentWithRetry = async (
+  geminiModel,
+  request,
+  maxRetries = 3,
+  onRetry
+) => {
   let attempts = 0;
+
+  const maskRequest = (req) => {
+    if (Array.isArray(req)) {
+      return req.map((part) =>
+        typeof part === "string" ? "..." : { text: "..." }
+      );
+    }
+    if (typeof req === "object" && req?.contents) {
+      return {
+        ...req,
+        contents: req.contents.map((content) => ({
+          ...content,
+          parts: content.parts.map((part) =>
+            part.text
+              ? { text: "..." }
+              : {
+                  inlineData: {
+                    mimeType: part.inlineData?.mimeType,
+                    data: "...",
+                  },
+                }
+          ),
+        })),
+      };
+    }
+    return req;
+  };
+
   while (attempts < maxRetries) {
     attempts++;
     try {
-      // Log structure before calling (similar to original callGemini)
-      let loggableRequest = request;
-      if (typeof request === 'object' && request !== null && 'contents' in request) {
-         loggableRequest = {
-             ...request,
-             contents: request.contents.map(content => ({
-                 ...content,
-                 parts: content.parts.map(part => part.text ? { text: '...' } : { inlineData: { mimeType: part.inlineData?.mimeType, data: '...' } })
-             }))
-         };
-      } else if (Array.isArray(request)) {
-          // Handle simple string or array of parts (though generateContent usually takes the object form)
-          loggableRequest = request.map(part => typeof part === 'string' ? '...' : (part.text ? { text: '...' } : { inlineData: { mimeType: part.inlineData?.mimeType, data: '...' } }));
-      }
-      console.log(`Calling gemini.generateContent (Attempt ${attempts}/${maxRetries})...`);
-      console.log("Payload structure:", JSON.stringify(loggableRequest, null, 2));
+      console.log(
+        `Calling gemini.generateContent (Attempt ${attempts}/${maxRetries})...`
+      );
+      console.log(
+        "Payload structure:",
+        JSON.stringify(maskRequest(request), null, 2)
+      );
 
       const result = await geminiModel.generateContent(request);
 
-      // Check for immediate non-retryable issues like safety blocks in the response
-      if (result?.response?.promptFeedback?.blockReason) {
-        console.warn(`Gemini response blocked due to: ${result.response.promptFeedback.blockReason}`, result.response.promptFeedback.safetyRatings);
-        throw new Error(`Content generation blocked due to: ${result.response.promptFeedback.blockReason}`); // Don't retry safety blocks
+      const blockReason = result?.response?.promptFeedback?.blockReason;
+      const text = await result?.response?.text();
+
+      if (blockReason) {
+        console.warn(
+          `Response blocked due to: ${blockReason}`,
+          result.response.promptFeedback.safetyRatings
+        );
+        throw new Error(`Blocked due to: ${blockReason}`);
       }
-       if (!result?.response?.text()) {
-           // Handle cases where response exists but text is empty without a block reason (might be unexpected)
-           console.error("Received empty text response from Gemini without explicit block reason:", JSON.stringify(result?.response, null, 2));
-           // Decide if this is retryable - potentially not, might indicate prompt issue. Let's not retry for now.
-           throw new Error("Received an empty text response from the generative model.");
-       }
 
-      // If we got here, the call was successful or had a non-retryable response issue handled above
+      if (!text) {
+        console.error(
+          "Empty text response:",
+          JSON.stringify(result?.response, null, 2)
+        );
+        throw new Error("Received empty text response.");
+      }
+
       return result;
-
     } catch (error) {
-      console.error(`Gemini generateContent Attempt ${attempts} failed:`, error);
+      console.error(`Attempt ${attempts} failed:`, error);
 
-      // Check for specific retryable errors (e.g., 5xx, network errors, RESOURCE_EXHAUSTED)
-      // Note: Specific error codes/types might depend on the SDK/environment. This is a general approach.
-      const isRetryable =
-        error.message?.includes("RESOURCE_EXHAUSTED") || // Specific Gemini error
-        error.message?.includes("500") || // Generic server error
-        error.message?.includes("503") || // Service unavailable
-        error.message?.toLowerCase().includes("network error") || // Generic network issue
-        error.message?.toLowerCase().includes("fetch failed"); // Another common network issue indicator
+      const retryable = [
+        "RESOURCE_EXHAUSTED",
+        "500",
+        "503",
+        "network error",
+        "fetch failed",
+      ].some((msg) => error.message?.toLowerCase().includes(msg.toLowerCase()));
 
-      if (isRetryable && attempts < maxRetries) {
-        // Wait before retrying with exponential backoff
-        const delay = Math.pow(2, attempts - 1) * 1000; // 1s, 2s, 4s
-        console.log(`Retrying Gemini call in ${delay / 1000}s...`);
-        if (onRetry) {
-          onRetry(attempts, maxRetries); // Notify caller about retry attempt
-        }
-        await new Promise(resolve => setTimeout(resolve, delay));
-        // Continue to next iteration of the while loop
+      if (retryable && attempts < maxRetries) {
+        const delay = Math.pow(2, attempts - 1) * 1000;
+        console.log(`Retrying in ${delay / 1000}s...`);
+        onRetry?.(attempts, maxRetries);
+        await new Promise((res) => setTimeout(res, delay));
       } else {
-        // Non-retryable error or max retries reached
-        console.error(`Gemini call failed permanently after ${attempts} attempts.`);
-        throw error; // Re-throw the last error
+        console.error(`Failed after ${attempts} attempts.`);
+        throw error;
       }
     }
   }
-  // Should not be reached if maxRetries > 0
-  throw new Error(`Gemini call failed after ${maxRetries} attempts.`);
-};
 
+  throw new Error(`Failed after ${maxRetries} attempts.`);
+};
 
 /**
  * Calls Gemini's generateContentStream method with automatic retries on specific failures.
@@ -93,26 +113,60 @@ export const generateContentWithRetry = async (geminiModel, request, maxRetries 
  * @returns {Promise<GenerateContentResult>} The result containing the stream.
  * @throws {Error} Throws an error if initiating the stream fails after all retries or encounters a non-retryable error.
  */
-export const generateContentStreamWithRetry = async (geminiModel, request, maxRetries = 3, onRetry) => {
+export const generateContentStreamWithRetry = async (
+  geminiModel,
+  request,
+  maxRetries = 3,
+  onRetry
+) => {
   let attempts = 0;
   while (attempts < maxRetries) {
     attempts++;
     try {
       // Log structure before calling
       let loggableRequest = request;
-       if (typeof request === 'object' && request !== null && 'contents' in request) {
-         loggableRequest = {
-             ...request,
-             contents: request.contents.map(content => ({
-                 ...content,
-                 parts: content.parts.map(part => part.text ? { text: '...' } : { inlineData: { mimeType: part.inlineData?.mimeType, data: '...' } })
-             }))
-         };
+      if (
+        typeof request === "object" &&
+        request !== null &&
+        "contents" in request
+      ) {
+        loggableRequest = {
+          ...request,
+          contents: request.contents.map((content) => ({
+            ...content,
+            parts: content.parts.map((part) =>
+              part.text
+                ? { text: "..." }
+                : {
+                    inlineData: {
+                      mimeType: part.inlineData?.mimeType,
+                      data: "...",
+                    },
+                  }
+            ),
+          })),
+        };
       } else if (Array.isArray(request)) {
-          loggableRequest = request.map(part => typeof part === 'string' ? '...' : (part.text ? { text: '...' } : { inlineData: { mimeType: part.inlineData?.mimeType, data: '...' } }));
+        loggableRequest = request.map((part) =>
+          typeof part === "string"
+            ? "..."
+            : part.text
+            ? { text: "..." }
+            : {
+                inlineData: {
+                  mimeType: part.inlineData?.mimeType,
+                  data: "...",
+                },
+              }
+        );
       }
-      console.log(`Calling gemini.generateContentStream (Attempt ${attempts}/${maxRetries})...`);
-      console.log("Payload structure:", JSON.stringify(loggableRequest, null, 2));
+      console.log(
+        `Calling gemini.generateContentStream (Attempt ${attempts}/${maxRetries})...`
+      );
+      console.log(
+        "Payload structure:",
+        JSON.stringify(loggableRequest, null, 2)
+      );
 
       // Attempt to initiate the stream
       const result = await geminiModel.generateContentStream(request);
@@ -120,14 +174,18 @@ export const generateContentStreamWithRetry = async (geminiModel, request, maxRe
       // Basic check if stream initiation seems okay (e.g., result object exists)
       // More robust checks might be needed depending on SDK behavior on immediate errors
       if (!result || !result.stream) {
-          throw new Error("Stream initiation failed, result or stream is missing.");
+        throw new Error(
+          "Stream initiation failed, result or stream is missing."
+        );
       }
 
       // If initiation seems successful, return the result containing the stream
       return result;
-
     } catch (error) {
-      console.error(`Gemini generateContentStream Attempt ${attempts} failed:`, error);
+      console.error(
+        `Gemini generateContentStream Attempt ${attempts} failed:`,
+        error
+      );
 
       // Check for specific retryable errors
       const isRetryable =
@@ -138,7 +196,9 @@ export const generateContentStreamWithRetry = async (geminiModel, request, maxRe
         error.message?.toLowerCase().includes("fetch failed");
 
       // Don't retry non-retryable errors (like safety blocks, bad requests - though these might not throw at initiation)
-      const isNonRetryable = error.message?.includes("SAFETY") || error.message?.includes("400 Bad Request");
+      const isNonRetryable =
+        error.message?.includes("SAFETY") ||
+        error.message?.includes("400 Bad Request");
 
       if (isRetryable && !isNonRetryable && attempts < maxRetries) {
         const delay = Math.pow(2, attempts - 1) * 1000;
@@ -146,16 +206,19 @@ export const generateContentStreamWithRetry = async (geminiModel, request, maxRe
         if (onRetry) {
           onRetry(attempts, maxRetries);
         }
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       } else {
-        console.error(`Gemini stream initiation failed permanently after ${attempts} attempts.`);
+        console.error(
+          `Gemini stream initiation failed permanently after ${attempts} attempts.`
+        );
         throw error; // Re-throw the last error
       }
     }
   }
-  throw new Error(`Gemini stream initiation failed after ${maxRetries} attempts.`);
+  throw new Error(
+    `Gemini stream initiation failed after ${maxRetries} attempts.`
+  );
 };
-
 
 // Example usage (replace actual calls with this):
 /*
