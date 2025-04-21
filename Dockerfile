@@ -27,32 +27,43 @@ ENV NEXTAUTH_URL=${NEXTAUTH_URL}
 
 # Install necessary dependencies for manually downloaded Chromium on Alpine
 # wget and unzip are needed for download; fontconfig and ttf-
-RUN apk add --no-cache \
-    wget \
-    unzip \
-    fontconfig \
-    ttf-freefont \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    udev \
-    libstdc++
+# RUN apk add --no-cache \
+#     wget \
+#     unzip \
+#     fontconfig \
+#     ttf-freefont \
+#     nss \
+#     freetype \
+#     harfbuzz \
+#     ca-certificates \
+#     udev \
+#     libstdc++
 
 # Download and unzip specific Chromium revision compatible with @sparticuz/chromium v133
 # Find compatible revisions: https://github.com/Sparticuz/chromium/releases
 # Using a known good revision URL (adjust if needed based on exact compatibility)
 # Trying a different build number for v133
-ENV CHROMIUM_REVISION=133.0.6911.0
-# Updated URL to official chrome-for-testing storage
-RUN wget --no-verbose https://storage.googleapis.com/chrome-for-testing-public/${CHROMIUM_REVISION}/linux64/chrome-linux64.zip -P /tmp \
-    && unzip /tmp/chrome-linux64.zip -d /opt \
-    && rm /tmp/chrome-linux64.zip \
-    && mv /opt/chrome-linux64 /opt/chromium \
-    && chmod +x /opt/chromium/chrome
+# ENV CHROMIUM_REVISION=133.0.6911.0
+# # Updated URL to official chrome-for-testing storage
+# RUN wget --no-verbose https://storage.googleapis.com/chrome-for-testing-public/${CHROMIUM_REVISION}/linux64/chrome-linux64.zip -P /tmp \
+#     && unzip /tmp/chrome-linux64.zip -d /opt \
+#     && rm /tmp/chrome-linux64.zip \
+#     && mv /opt/chrome-linux64 /opt/chromium \
+#     && chmod +x /opt/chromium/chrome
 
 # Set the executable path for Puppeteer
-ENV PUPPETEER_EXECUTABLE_PATH=/opt/chromium/chrome
+# ENV PUPPETEER_EXECUTABLE_PATH=/opt/chromium/chrome
+
+# Install any needed dependencies
+RUN apk update && apk add --no-cache --virtual .build-deps \
+    cairo-dev \
+    pango-dev \
+    giflib-dev \
+    librsvg-dev && \
+    npm install && \
+    apk del .build-deps
+
+
 
 # Copy built app from the builder stage
 COPY --from=builder /app ./
