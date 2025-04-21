@@ -54,18 +54,23 @@ ENV NEXTAUTH_URL=${NEXTAUTH_URL}
 # Set the executable path for Puppeteer
 # ENV PUPPETEER_EXECUTABLE_PATH=/opt/chromium/chrome
 
-# Install any needed dependencies
-RUN apk update && apk add --no-cache --virtual .build-deps \
-    cairo-dev \
-    pango-dev \
-    giflib-dev \
-    librsvg-dev && \
-    npm install && \
-    apk del .build-deps
+# Install runtime OS dependencies (if needed for canvas/image processing, etc.)
+# Ensure these are the correct package names for Alpine runtime versions
+RUN apk update && apk add --no-cache \
+    cairo \
+    pango \
+    giflib \
+    librsvg \
+    && rm -rf /var/cache/apk/*
 
+# Copy necessary artifacts from the builder stage
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+# Uncomment if package-lock.json is used and needed
+# COPY --from=builder /app/package-lock.json ./package-lock.json
 
-
-# Copy built app from the builder stage
 COPY --from=builder /app ./
 
 # Expose port 3000 for Next.js
