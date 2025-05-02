@@ -48,7 +48,7 @@ let gemini = null;
 if (geminiApiKey) {
   try {
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    gemini = genAI.getGenerativeModel({ model: "gemini-pro" });
+    gemini = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-04-17" });
   } catch (e) {
     console.error("Failed to initialize Gemini model for summary:", e);
   }
