@@ -22,6 +22,7 @@ The platform allows users to upload various diagram formats (PDF, images, CAD). 
 -   **Compliance Checker:** Validates diagram components against selected standards (IBC, Eurocodes, IS) and provides pass/fail reports.
 -   **Diagram Comparison:** Visually highlights differences between two versions of a diagram.
 -   **Project Knowledge Hub:** A searchable repository of past diagrams and insights, queryable via natural language.
+-   **Project Management (Rename/Remove):** Users can rename and remove projects from the sidebar interface.
 -   **Admin & Settings:** User management and integration configuration.
 
 ## Target Users

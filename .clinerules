@@ -1,1 +1,6 @@
 # Cline Rules
+
+## Project-Specific Patterns & Preferences
+
+- **Environment Variables in API Routes:** Always import and use constants from `src/constants.js` for environment variables in API routes, instead of directly accessing `process.env`.
+- **Import Aliases in Dynamic Routes:** Be cautious when using the `@/` alias in dynamic route files (e.g., `src/app/api/[...]/[id]/route.js`). If alias resolution issues occur, prefer using relative paths (e.g., `../../../`) for imports.

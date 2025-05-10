@@ -4,6 +4,15 @@
 
 **Status:** Separated dashboard layout from main site layout. Implemented functional dashboard header with user dropdown. Added file download links, serial numbers, and text wrapping to file list. Fixed chat scrollbar styling. Restored public page header visibility. Previous API retry logic and guest upload enhancements remain functional.
 
+**Recent Activity (May 10 - Afternoon):**
+- **Project Management Features:**
+    - Implemented three-dot menu and dropdown for project items in `src/components/Sidebar.js`.
+    - Created custom modal components `src/components/RenameProjectModal.js` and `src/components/RemoveProjectModal.js`.
+    - Integrated modals and frontend logic for rename/remove in `src/components/Sidebar.js`.
+    - Added PUT and DELETE handlers to `src/app/api/projects/[projectId]/route.js` for backend rename/remove functionality, including database and GCS operations.
+    - Corrected import path for `src/constants.js` in `src/app/api/projects/[projectId]/route.js`.
+    - Implemented project name truncation to 20 characters in `src/components/Sidebar.js`.
+
 **Recent Activity (April 11 - Afternoon):**
 - **Dashboard Layout Separation:**
     - Created `src/app/dashboard` directory.

@@ -35,7 +35,9 @@
     -   **Dashboard File List:** Reordered sections. Added serial numbers, download icons (linked to `gcsUrl`), and text wrapping for filenames. List scrolls independently.
 -   **File Handling:** GCS upload for diagrams (supports sequential uploads for guest multi-file). API direct downloads from GCS for chat. Background file sync API (`sync-files`) correctly handles guest authorization.
 -   **Diagram Processing:** Google Cloud Vision OCR on upload. **Optional Gemini summary on upload now includes retry logic.**
--   **Project Management:** API for creating/fetching projects (supports guest), Sidebar display, New Project modal.
+-   **Project Management:** API for creating/fetching projects (supports guest), Sidebar display, New Project modal. **Added rename and remove functionality with custom popups in the sidebar, including backend API handlers (PUT/DELETE) and GCS file cleanup.**
+-   **UI Components:** **Implemented project name truncation to 20 characters in the sidebar.**
+-   **Configuration:** **Corrected import path for `src/constants.js` in API routes.**
 -   **Chat:**
     -   Contextual chat UI (`ChatInterface.js`) with **consistent dark background**.
     -   Streaming responses from backend API (**stream initiation includes retry logic**).

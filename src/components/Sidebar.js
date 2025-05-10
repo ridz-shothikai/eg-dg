@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation'; // Import usePathname
 import NewProjectModal from './NewProjectModal';
+// Import new modal components (will be created in the next step)
+import RenameProjectModal from './RenameProjectModal';
+import RemoveProjectModal from './RemoveProjectModal';
 
 // Placeholder Icon (assuming it's defined elsewhere or we add it)
 const PlaceholderIcon = ({ className = "w-6 h-6" }) => (
@@ -12,6 +15,14 @@ const PlaceholderIcon = ({ className = "w-6 h-6" }) => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
   </svg>
 );
+
+// Helper function to truncate text
+const truncateText = (text, maxLength) => {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return text.substring(0, maxLength) + '...';
+};
 
 
 // List of public routes where the sidebar should NOT be shown
@@ -25,8 +36,15 @@ export default function Sidebar() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false); // State for modal visibility
+  const [isModalOpen, setIsModalOpen] = useState(false); // State for NewProjectModal visibility
   const router = useRouter();
+
+  // State for dropdown and modals
+  const [openDropdownId, setOpenDropdownId] = useState(null); // Track which project's dropdown is open
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false); // State for RenameProjectModal visibility
+  const [projectToRename, setProjectToRename] = useState(null); // Store project data for renaming
+  const [isRemoveModalOpen, setIsRemoveModalOpen] = useState(false); // State for RemoveProjectModal visibility
+  const [projectToRemove, setProjectToRemove] = useState(null); // Store project data for removing
 
   // Function to create default project and redirect
   const createAndRedirectToDefaultProject = useCallback(async () => {
@@ -183,13 +201,59 @@ export default function Sidebar() {
           <ul>
             {projects.length > 0 ? (
               projects.map((project) => (
-                <li key={project._id} className="mb-2">
-                  {/* Link to the project detail page - UPDATED PATH */}
-                  <Link href={`/dashboard/project/${project._id}`}>
-                    <span className="block p-2 rounded hover:bg-[#130830] cursor-pointer">
-                      {project.name}
-                    </span>
-                  </Link>
+                <li key={project._id} className="mb-2 relative"> {/* Added relative positioning for dropdown */}
+                  <div className="flex items-center justify-between"> {/* Flex container for name and options */}
+                    {/* Link to the project detail page - UPDATED PATH */}
+                    <Link href={`/dashboard/project/${project._id}`} className="flex-grow"> {/* Allow link to take available space */}
+                      <span className="block p-2 rounded hover:bg-[#130830] cursor-pointer truncate"> {/* Added truncate */}
+                        {truncateText(project.name, 20)} {/* Apply custom truncation */}
+                      </span>
+                    </Link>
+                    {/* Three-dot menu button */}
+                    <button
+                      className="p-2 rounded hover:bg-[#130830] focus:outline-none"
+                      onClick={(e) => {
+                        e.preventDefault(); // Prevent navigating to project page
+                        // Toggle dropdown visibility for this project
+                        setOpenDropdownId(openDropdownId === project._id ? null : project._id);
+                      }}
+                    >
+                      {/* Placeholder for three dots icon */}
+                      &#x2022;&#x2022;&#x2022; {/* Unicode for ellipsis */}
+                    </button>
+                  </div>
+
+                  {/* Dropdown Menu */}
+                  {openDropdownId === project._id && (
+                    <div className="absolute right-0 mt-2 w-48 bg-[#110927] rounded-md shadow-lg z-10"> {/* Positioned dropdown */}
+                      <div className="py-1">
+                        <button
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#130830]"
+                          onClick={() => {
+                            // Handle Rename - Open Rename Modal
+                            console.log('Rename clicked for', project.name);
+                            setProjectToRename(project);
+                            setIsRenameModalOpen(true);
+                            setOpenDropdownId(null); // Close dropdown
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#130830]"
+                          onClick={() => {
+                            // Handle Remove - Open Remove Modal
+                            console.log('Remove clicked for', project.name);
+                            setProjectToRemove(project);
+                            setIsRemoveModalOpen(true);
+                            setOpenDropdownId(null); // Close dropdown
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))
             ) : (
@@ -213,6 +277,80 @@ export default function Sidebar() {
         onClose={() => setIsModalOpen(false)}
         onCreate={handleCreateProject}
       />
+
+      {/* Rename Project Modal */}
+      <RenameProjectModal
+        isOpen={isRenameModalOpen}
+        onClose={() => setIsRenameModalOpen(false)}
+        project={projectToRename}
+        onRename={handleRenameProject} // Implement this function next
+      />
+
+      {/* Remove Project Modal */}
+      <RemoveProjectModal
+        isOpen={isRemoveModalOpen}
+        onClose={() => setIsRemoveModalOpen(false)}
+        project={projectToRemove}
+        onRemove={handleRemoveProject} // Implement this function next
+      />
     </React.Fragment>
   );
+
+  // Implement the rename and remove handlers
+  async function handleRenameProject(projectId, newName) {
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to rename project');
+      }
+
+      // Update the projects list in state
+      setProjects(projects.map(p =>
+        p._id === projectId ? { ...p, name: newName } : p
+      ));
+
+      setIsRenameModalOpen(false); // Close modal on success
+      setProjectToRename(null); // Clear selected project
+
+    } catch (err) {
+      console.error('Error renaming project:', err);
+      // Re-throw the error so the modal can display it
+      throw err;
+    }
+  }
+
+  async function handleRemoveProject(projectId) {
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to remove project');
+      }
+
+      // Remove the project from the projects list in state
+      setProjects(projects.filter(p => p._id !== projectId));
+
+      setIsRemoveModalOpen(false); // Close modal on success
+      setProjectToRemove(null); // Clear selected project
+
+      // Optional: Redirect if the removed project was the currently viewed one
+      if (currentProjectId === projectId) {
+        router.push('/dashboard'); // Redirect to the main dashboard page
+      }
+
+    } catch (err) {
+      console.error('Error removing project:', err);
+      // Re-throw the error so the modal can display it
+      throw err;
+    }
+  }
 }

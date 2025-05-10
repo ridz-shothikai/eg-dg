@@ -45,6 +45,7 @@ graph TD
     *   The frontend reads the stream and updates the UI incrementally.
     *   The backend saves the full conversation to the `Project` document in MongoDB after the stream completes.
     *   **Authorization:** API checks for `next-auth` session first. If none, checks for `X-Guest-ID` header and validates against `project.guestOwnerId`.
+    *   **Project Management:** The API route also handles `PUT` requests for renaming projects and `DELETE` requests for removing projects and their associated data (diagrams and GCS files), with appropriate authorization checks.
 7.  **BoM/BoQ Generation:**
     *   **Authorization:** API checks for `next-auth` session first. If none, checks for `X-Guest-ID` header and validates against `project.guestOwnerId`.
     *   The backend API route downloads relevant diagrams from GCS.
