@@ -342,9 +342,17 @@ export default function Sidebar() {
       setIsRemoveModalOpen(false); // Close modal on success
       setProjectToRemove(null); // Clear selected project
 
-      // Optional: Redirect if the removed project was the currently viewed one
-      if (currentProjectId === projectId) {
-        router.push('/dashboard'); // Redirect to the main dashboard page
+      // Get the updated list of projects after removal
+      const updatedProjects = projects.filter(p => p._id !== projectId);
+      setProjects(updatedProjects); // Update state with the filtered list
+
+      // Redirect logic
+      if (updatedProjects.length > 0) {
+        // Redirect to the first project in the updated list
+        router.push(`/dashboard/project/${updatedProjects[0]._id}`);
+      } else {
+        // If no projects remain, redirect to the main dashboard page
+        router.push('/dashboard');
       }
 
     } catch (err) {
