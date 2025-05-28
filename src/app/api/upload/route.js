@@ -14,6 +14,7 @@ import { generateContentWithRetry } from '@/lib/geminiUtils';
 import { prepareDiagramInBackground } from '@/lib/backgroundTasks'; // Import the background task trigger
 import { DxfParser } from 'dxf-parser'; // Import DXF parser
 import { convertDwgToDxf } from '@/lib/cloudConvertUtils';
+import pdfParse from 'pdf-parse'; // Import pdf-parse
 
 const {
   MONGODB_URI,
@@ -312,6 +313,20 @@ export async function POST(request) {
         // Skip OCR and synchronous Gemini summary for DXF
         ocrText = null;
         geminiResponse = null;
+    }  else if (fileType === 'pdf') {
+      console.log('Processing PDF file with pdf-parse...');
+      try {
+        const data = await pdfParse(buffer);
+        parsedContentDetailedText = data.text;
+        console.log('PDF parsed and text content extracted using pdf-parse.');
+        ocrText = null; // Ensure ocrText is null for PDFs
+        geminiResponse = null; // Ensure geminiResponse is null for PDFs
+      } catch (parseError) {
+        console.error('PDF parsing error with pdf-parse:', parseError);
+        parsedContentDetailedText = `Error parsing PDF file with pdf-parse: ${parseError.message}`;
+        ocrText = null;
+        geminiResponse = null;
+      }
     } else { // <-- Added else for image processing try/catch
       // --- Existing logic for image files (OCR and synchronous Gemini summary) ---
       try { // <-- Inner try block for image processing
