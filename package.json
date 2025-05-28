@@ -16,6 +16,7 @@
     "@sparticuz/chromium": "^133.0.0",
     "axios": "^1.8.4",
     "bcryptjs": "^3.0.2",
+    "cloudconvert": "^3.0.0",
     "dxf-parser": "^1.1.2",
     "emitter": "^0.0.5",
     "html-pdf-node": "^1.0.8",

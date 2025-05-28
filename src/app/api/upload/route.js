@@ -13,6 +13,7 @@ import * as constants from '@/constants';
 import { generateContentWithRetry } from '@/lib/geminiUtils';
 import { prepareDiagramInBackground } from '@/lib/backgroundTasks'; // Import the background task trigger
 import { DxfParser } from 'dxf-parser'; // Import DXF parser
+import { convertDwgToDxf } from '@/lib/cloudConvertUtils';
 
 const {
   MONGODB_URI,
@@ -89,7 +90,9 @@ export async function POST(request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileName = file.name;
-    const fileType = fileName.split('.').pop()?.toLowerCase(); // Get file type and convert to lowercase
+    const fileNameWithoutExtension = fileName.replace(/\.[^/.]+$/, ""); // removing extention from the file name
+    console.log(fileNameWithoutExtension, "fileNameWithoutExtension")
+    let fileType = fileName.split('.').pop()?.toLowerCase(); // Get file type and convert to lowercase
     const fileSize = file.size;
 
     // --- Upload to GCS ---
@@ -124,11 +127,45 @@ export async function POST(request) {
     let parsedContentDetailedText = null;
     let geminiResponse = null; // Keep this for potential future use or if we add a DXF specific summary
 
+    let originalFileType = fileType; // Store the original file type
+    let processedTempFilePath = tempFilePath; // Store the path to the processed file
+
+    // --- Handle DWG files by converting to DXF first ---
+    if (fileType === 'dwg') {
+     try {
+      console.log('Converting DWG file to DXF format...');
+      // Create a directory for the converted file
+      const convertedDir = path.join(projectTempDir, 'converted');
+      await fs.mkdir(convertedDir, { recursive: true });
+
+      // Get the file name without extension
+      const convertedFilePath = path.join(convertedDir, `${path.basename(fileName, '.dwg')}.dxf`);
+
+      // Convert DWG to DXF
+      processedTempFilePath = await convertDwgToDxf(tempFilePath, convertedDir, fileNameWithoutExtension);
+
+      // Update file type to DXF for furthur processing
+      originalFileType = 'dwg'; // Keep track of the original file format
+      fileType = 'dxf'; // PProcess as DXF
+
+      console.log(`DWG file converted to DXF: ${processedTempFilePath}`);
+     } catch (conversionError) {
+      console.log('DWG to DXF conversion error:', conversionError);
+      return NextResponse.json({
+        message: 'Failed to convert DWG file to DXF format',
+        error: conversionError.message,
+      }, { status: 500 });
+     }
+    }
+
     if (fileType === 'dxf') {
         console.log('Processing DXF file...');
         try {
+          // Read the DXF file content
+          const dxfContent = await fs.readFile(processedTempFilePath, 'utf-8');
+          
             const parser = new DxfParser();
-            const dxfData = parser.parseSync(buffer.toString('utf-8')); // dxf-parser expects a string
+            const dxfData = parser.parseSync(dxfContent); // dxf-parser expects a string
             parsedDataJson = dxfData; // Store the structured data
 
             // --- Generate Detailed Text Representation from DXF Data ---
@@ -261,6 +298,11 @@ export async function POST(request) {
             parsedContentDetailedText = textSummary;
             console.log('DXF parsed and detailed text representation generated.');
 
+            // Add information about original format if converted
+            if (originalFileType === 'dwg') {
+              parsedContentDetailedText += '\n\nNote: This file was originally uploaded as a DWG file and automatically converted to DXF format for processing.';
+            }
+
         } catch (parseError) {
             console.error('DXF parsing error:', parseError);
             parsedDataJson = { error: parseError.message };
@@ -357,7 +399,7 @@ userId = session.user.id; // Set userId if session exists
 const diagramData = {
 fileName: fileName,
 storagePath: storagePath,
-fileType: fileType,
+fileType: originalFileType || fileType, // Stroe the original file type
 fileSize: fileSize,
 project: projectId,
 uploadedBy: userId, // Will be null for guest uploads
