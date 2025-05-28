@@ -16,6 +16,8 @@ import path from 'path'; // Import path
 import { Storage } from '@google-cloud/storage'; // Import Storage
 import * as constants from '@/constants';
 import { generateContentStreamWithRetry } from '@/lib/geminiUtils'; // Import the stream retry helper
+// Import the new function
+import { generateContentWithRetry, generateDxfAwareSystemPrompt } from '@/lib/geminiUtils';
 
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants; // Added GCS_BUCKET_NAME and GOOGLE_CLOUD_PROJECT_ID
 
@@ -118,8 +120,12 @@ export async function POST(request, context) {
     // Fetch diagrams using storagePath
     const diagrams = await Diagram.find({
         project: projectId,
-        storagePath: { $exists: true, $ne: null, $ne: '' }
-    }).select('fileName storagePath'); // Select storagePath
+        // Ensure either storagePath (for images) or parsedContentDetailedText (for DXF) exists
+        $or: [
+            { storagePath: { $exists: true, $ne: null, $ne: '' } },
+            { parsedContentDetailedText: { $exists: true, $ne: null, $ne: '' } }
+        ]
+    }).select('fileName storagePath parsedContentDetailedText fileType'); // Select necessary fields
 
     if (diagrams.length === 0) {
         // Handle cases with no diagrams
@@ -138,37 +144,50 @@ export async function POST(request, context) {
     }
 
     for (const diag of diagrams) {
+        processedDiagramNames.push(diag.fileName); // Add file name regardless of type
 
-      console.log(diag);
-
-        const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
-        const objectPath = diag.storagePath.startsWith(gcsPrefix)
-            ? diag.storagePath.substring(gcsPrefix.length)
-            : diag.storagePath;
-
-        try {
-            // Add "Start Load" log
-            console.log(`Chat API: Start Load ${diag.fileName} to model`);
-            console.log(` -> Downloading GCS file for chat context: ${objectPath}`);
-            const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
-            const base64Data = fileBuffer.toString('base64');
-            // Add "Loaded" log
-            console.log(`Chat API: ${diag.fileName} loaded in the model`);
-
+        if (diag.fileType === 'dxf' && diag.parsedContentDetailedText) {
+            // If it's a DXF with parsed text, add the text as a part
+            console.log(`Chat API: Including parsed DXF text for ${diag.fileName} in model context.`);
             fileParts.push({
-                inlineData: {
-                    mimeType: mime.lookup(diag.fileName) || 'application/octet-stream',
-                    data: base64Data
-                }
+                text: `--- Start DXF Data for ${diag.fileName} ---\n${diag.parsedContentDetailedText}\n--- End DXF Data for ${diag.fileName} ---`
             });
-            processedDiagramNames.push(diag.fileName);
-            console.log(` -> SUCCESS: Prepared inlineData for ${diag.fileName} from GCS.`);
+            console.log(` -> SUCCESS: Prepared text part for ${diag.fileName} (DXF).`);
 
-        } catch (downloadError) {
-            console.error(` -> FATAL ERROR: Failed to download GCS file ${objectPath} (${diag.fileName}) for chat:`, downloadError.message);
-            // Fail Fast: Return a user-friendly error immediately
-            const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
-            return NextResponse.json({ message: userMessage }, { status: 500 }); // Use 500 for internal processing error
+        } else if (diag.storagePath && diag.fileType !== 'dxf') { // Add fileType check here
+            // If it has a storage path (likely an image), download and add as inlineData
+            const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
+            const objectPath = diag.storagePath.startsWith(gcsPrefix)
+                ? diag.storagePath.substring(gcsPrefix.length)
+                : diag.storagePath;
+
+            try {
+                // Add "Start Load" log
+                console.log(`Chat API: Start Load ${diag.fileName} to model`);
+                console.log(` -> Downloading GCS file for chat context: ${objectPath}`);
+                const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
+                const base64Data = fileBuffer.toString('base64');
+                // Add "Loaded" log
+                console.log(`Chat API: ${diag.fileName} loaded in the model`);
+
+                fileParts.push({
+                    inlineData: {
+                        mimeType: mime.lookup(diag.fileName) || 'application/octet-stream',
+                        data: base64Data
+                    }
+                });
+                console.log(` -> SUCCESS: Prepared inlineData for ${diag.fileName} from GCS.`);
+
+            } catch (downloadError) {
+                console.error(` -> FATAL ERROR: Failed to download GCS file ${objectPath} (${diag.fileName}) for chat:`, downloadError.message);
+                // Fail Fast: Return a user-friendly error immediately
+                const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
+                return NextResponse.json({ message: userMessage }, { status: 500 }); // Use 500 for internal processing error
+            }
+        } else {
+             // Handle cases where a diagram exists but has neither storagePath nor parsedContentDetailedText
+             console.warn(`Chat API: Diagram ${diag._id} (${diag.fileName}) has neither storagePath nor parsedContentDetailedText. Skipping.`);
+             // Optionally, inform the user or log this as a potential data issue
         }
     }
 
@@ -224,6 +243,24 @@ export async function POST(request, context) {
                   console.log(`Retrying Gemini stream initiation (${attempt}/${max})...`);
               }
           );
+
+          // In the POST function, after preparing fileParts and processedDiagramNames
+          
+          // Generate DXF-aware system prompt
+          const systemPrompt = generateDxfAwareSystemPrompt(processedDiagramNames);
+          
+          // Use the system prompt in the Gemini request
+          const geminiParts = [
+            {
+              text: systemPrompt,
+              role: "model"
+            },
+            ...fileParts,
+            {
+              text: message,
+              role: "user"
+            }
+          ];
 
           // Process the stream from Gemini (if initiation succeeded)
           for await (const chunk of resultStream.stream) {

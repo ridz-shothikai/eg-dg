@@ -467,4 +467,15 @@ Generate the Bill of Materials report in HTML format now, using both the OCR tex
       'Connection': 'keep-alive',
     },
   });
-}
+// In the BOM report generation, add DXF-specific instructions
+const hasDxfFiles = diagrams.some(diag => diag.fileType === 'dxf');
+
+let promptPrefix = `Generate a detailed Bill of Materials (BOM) based on the provided engineering diagrams.`;
+
+if (hasDxfFiles) {
+  promptPrefix += `\n\nFor DXF files, analyze the following:\n
+1. Extract component information from text entities and block references\n
+2. Use dimension entities to determine quantities and measurements\n
+3. Identify standard parts based on geometric patterns (circles for fasteners, etc.)\n
+4. Group similar components based on layer information`;
+}};

@@ -201,7 +201,8 @@ export default function HomePage() {
                       </span>
                     </span>
                     {/* Add 'multiple' attribute to allow multiple file selection */}
-                    <input type="file" id="guest-file-upload" className="hidden" multiple onChange={(e) => {
+                    {/* Add 'accept' attribute to specify allowed file types, including .dxf */}
+                    <input type="file" id="guest-file-upload" className="hidden" multiple accept=".pdf, .png, .jpg, .jpeg, .dxf, .dwg" onChange={(e) => {
                       if (e.target.files && e.target.files.length > 0) { handleGuestUpload(e.target.files); } // Pass the FileList
                       }} disabled={isUploading} />
                   </label>

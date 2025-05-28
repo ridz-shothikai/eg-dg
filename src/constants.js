@@ -1,4 +1,4 @@
-export const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://admin:admin@cluster0.reeqo.mongodb.net/eg_dg';
+export const MONGODB_URI = 'mongodb+srv://Shothik_AI:qFP1zpllgBJ0FHAw@cluster0.69zqaep.mongodb.net/eg-dg?retryWrites=true&w=majority';
 export const GOOGLE_CLOUD_PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT_ID || 'shothikai-gcp';
 export const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'shothik';
 export const GOOGLE_CLOUD_KEYFILE = process.env.GOOGLE_CLOUD_KEYFILE || 'sa.json'; // Added GOOGLE_CLOUD_KEYFILE

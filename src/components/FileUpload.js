@@ -161,6 +161,17 @@ export default function FileUpload({ projectId }) { // Accept projectId as prop
     onDragLeave: () => setIsDragging(false),
     // Define accepted file types based on PRD (PDF, PNG, JPG, DWG, DXF)
     // Note: MIME types for DWG/DXF can be tricky and might need refinement.
+    accept: {
+        'application/pdf': ['.pdf'],
+        'image/png': ['.png'],
+        // 'image/gif': ['.gif'],
+        'image/jpeg': ['.jpg', '.jpeg'],
+        'application/vnd.acad': ['.dwg'], // Common MIME type for DWG
+        'application/dxf': ['.dxf'], // Common MIME type for DXF (less standardized)
+        'drawing/dxf': ['.dxf'], // Another common one
+        '.dxf': ['.dxf'], // Fallback to extension
+        '.dwg': ['.dwg'], // Fallback to extension
+    },
     // Allow multiple files
     multiple: true
   });

@@ -60,6 +60,14 @@ const DiagramSchema = new mongoose.Schema({
   ocrText: {
     type: String,
   },
+  // Store structured data from DXF parsing (flexible structure)
+  parsedDataJson: {
+    type: mongoose.Schema.Types.Mixed, // Allows storing arbitrary JSON-like data
+  },
+  // Store detailed text representation from DXF parsing for Gemini context
+  parsedContentDetailedText: {
+    type: String,
+  },
   // Store structured data extracted from OCR/Analysis (flexible structure)
   extractedData: {
     type: mongoose.Schema.Types.Mixed, // Allows storing arbitrary JSON-like data
