@@ -11,8 +11,9 @@
   "dependencies": {
     "@google-cloud/storage": "^7.15.2",
     "@google-cloud/vision": "^5.1.0",
-    "@google/generative-ai": "^0.24.0",
+    "@google/generative-ai": "^0.24.1",
     "@heroicons/react": "^2.2.0",
+    "@pinecone-database/pinecone": "^6.0.1",
     "@sparticuz/chromium": "^133.0.0",
     "axios": "^1.8.4",
     "bcryptjs": "^3.0.2",
@@ -20,6 +21,7 @@
     "dxf-parser": "^1.1.2",
     "emitter": "^0.0.5",
     "html-pdf-node": "^1.0.8",
+    "langchain": "^0.3.27",
     "mime-types": "^3.0.1",
     "mongoose": "^8.13.0",
     "next": "15.2.4",

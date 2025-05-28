@@ -19,9 +19,14 @@ import { generateContentStreamWithRetry } from '@/lib/geminiUtils'; // Import th
 // Import the new function
 import { generateContentWithRetry, generateDxfAwareSystemPrompt } from '@/lib/geminiUtils';
 
+// Import RAG utilities
+import { generateEmbedding } from '@/lib/embeddingUtils';
+import { queryVectors } from '@/lib/pineconeUtils';
+
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants; // Added GCS_BUCKET_NAME and GOOGLE_CLOUD_PROJECT_ID
 
 // --- Initialize GCS Storage ---
+// Keep GCS storage initialization for potential future use or other functionalities
 let storage = null;
 if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
     try {
@@ -117,88 +122,41 @@ export async function POST(request, context) {
         return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    // Fetch diagrams using storagePath
-    const diagrams = await Diagram.find({
-        project: projectId,
-        // Ensure either storagePath (for images) or parsedContentDetailedText (for DXF) exists
-        $or: [
-            { storagePath: { $exists: true, $ne: null, $ne: '' } },
-            { parsedContentDetailedText: { $exists: true, $ne: null, $ne: '' } }
-        ]
-    }).select('fileName storagePath parsedContentDetailedText fileType'); // Select necessary fields
+    // --- RAG: Query Pinecone for relevant document chunks ---
+    console.log(`Chat API: Querying Pinecone for relevant chunks for project ${projectId}...`);
+    let retrievedChunks = [];
+    let processedDiagramNames = []; // Still need diagram names for the system prompt
 
-    if (diagrams.length === 0) {
-        // Handle cases with no diagrams
-        return NextResponse.json({ message: "No documents found for this project to chat with." }, { status: 503 });
-    }
+    try {
+        // Generate embedding for the user's message
+        const queryEmbedding = await generateEmbedding(message);
 
-    // --- Prepare File Parts by Downloading Directly from GCS (Fail Fast) ---
-    console.log(`Chat API: Preparing ${diagrams.length} files for project ${projectId} from GCS...`);
-    const fileParts = [];
-    const processedDiagramNames = [];
-    // Need GCS storage client initialized earlier
-    if (!storage || !GCS_BUCKET_NAME) {
-        // Use a user-friendly message
-        console.error("Chat API: GCS Storage client not initialized or bucket name missing.");
-        return NextResponse.json({ message: 'Chat functionality is disabled due to a configuration issue. Please contact support.' }, { status: 503 });
-    }
+        // Query Pinecone, filtering by projectId
+        // Adjust topK as needed to retrieve a suitable number of chunks
+        retrievedChunks = await queryVectors(queryEmbedding, 10, { projectId: projectId });
 
-    for (const diag of diagrams) {
-        processedDiagramNames.push(diag.fileName); // Add file name regardless of type
+        console.log(`Chat API: Retrieved ${retrievedChunks.length} chunks from Pinecone.`);
 
-        if (diag.fileType === 'dxf' && diag.parsedContentDetailedText) {
-            // If it's a DXF with parsed text, add the text as a part
-            console.log(`Chat API: Including parsed DXF text for ${diag.fileName} in model context.`);
-            fileParts.push({
-                text: `--- Start DXF Data for ${diag.fileName} ---\n${diag.parsedContentDetailedText}\n--- End DXF Data for ${diag.fileName} ---`
-            });
-            console.log(` -> SUCCESS: Prepared text part for ${diag.fileName} (DXF).`);
-
-        } else if (diag.storagePath && diag.fileType !== 'dxf') { // Add fileType check here
-            // If it has a storage path (likely an image), download and add as inlineData
-            const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
-            const objectPath = diag.storagePath.startsWith(gcsPrefix)
-                ? diag.storagePath.substring(gcsPrefix.length)
-                : diag.storagePath;
-
-            try {
-                // Add "Start Load" log
-                console.log(`Chat API: Start Load ${diag.fileName} to model`);
-                console.log(` -> Downloading GCS file for chat context: ${objectPath}`);
-                const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
-                const base64Data = fileBuffer.toString('base64');
-                // Add "Loaded" log
-                console.log(`Chat API: ${diag.fileName} loaded in the model`);
-
-                fileParts.push({
-                    inlineData: {
-                        mimeType: mime.lookup(diag.fileName) || 'application/octet-stream',
-                        data: base64Data
-                    }
-                });
-                console.log(` -> SUCCESS: Prepared inlineData for ${diag.fileName} from GCS.`);
-
-            } catch (downloadError) {
-                console.error(` -> FATAL ERROR: Failed to download GCS file ${objectPath} (${diag.fileName}) for chat:`, downloadError.message);
-                // Fail Fast: Return a user-friendly error immediately
-                const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
-                return NextResponse.json({ message: userMessage }, { status: 500 }); // Use 500 for internal processing error
-            }
+        // Extract unique diagram names from retrieved chunks for the system prompt
+        const uniqueDiagramIds = [...new Set(retrievedChunks.map(chunk => chunk.metadata.diagramId))];
+        if (uniqueDiagramIds.length > 0) {
+             const diagramsInContext = await Diagram.find({ _id: { $in: uniqueDiagramIds } }).select('fileName');
+             processedDiagramNames = diagramsInContext.map(diag => diag.fileName);
         } else {
-             // Handle cases where a diagram exists but has neither storagePath nor parsedContentDetailedText
-             console.warn(`Chat API: Diagram ${diag._id} (${diag.fileName}) has neither storagePath nor parsedContentDetailedText. Skipping.`);
-             // Optionally, inform the user or log this as a potential data issue
+             // If no chunks retrieved, still include project name in prompt
+             processedDiagramNames = [`Project: ${project.name}`];
         }
-    }
 
-    // Check if *any* files were processed (this check might be redundant now due to fail-fast, but keep as safeguard)
-    if (fileParts.length !== diagrams.length) {
-         console.error(`Chat API: Mismatch in prepared files. Expected ${diagrams.length}, got ${fileParts.length}. This shouldn't happen with fail-fast.`);
-         // Inform user about the inconsistency
-         return NextResponse.json({ message: "An inconsistency occurred while preparing documents for chat. Please try again." }, { status: 500 });
+
+    } catch (ragError) {
+        console.error(`Error during Pinecone query for project ${projectId}:`, ragError);
+        // Decide how to handle RAG errors - maybe proceed without RAG context?
+        // For now, log and proceed without RAG context, relying only on chat history.
+        console.warn("Proceeding with chat without RAG context due to an error.");
+        retrievedChunks = []; // Ensure no chunks are used if there's an error
+        processedDiagramNames = [`Project: ${project.name} (Document context unavailable)`]; // Update prompt info
     }
-    console.log(`...Chat file preparation complete. Using ${fileParts.length} files from GCS.`);
-    // --- End File Preparation ---
+    // --- End RAG Query ---
 
 
     // --- Construct Full Conversation History for Each Request ---
@@ -211,12 +169,29 @@ export async function POST(request, context) {
         });
     }
 
-    // Add the current user message WITH file parts and context text including identity instruction
-    const contextText = `You are an AI assistant specialized in analyzing engineering documents for the project "${project.name}". Your purpose is to help users understand these documents. Do not reveal you are Gemini or any other specific model. Now, using the context of the following diagrams (${processedDiagramNames.join(', ')}), answer the user's question.`;
+    // Prepare context text from retrieved chunks
+    let contextTextFromRAG = "";
+    if (retrievedChunks.length > 0) {
+        contextTextFromRAG = "Document Context:\n";
+        retrievedChunks.forEach(chunk => {
+            // Include filename and chunk text
+            contextTextFromRAG += `--- File: ${chunk.metadata.fileName} (Chunk ${chunk.metadata.chunkIndex}) ---\n${chunk.metadata.text}\n\n`;
+        });
+        contextTextFromRAG += "---\n"; // Separator
+    }
+
+
+    // Add the current user message WITH RAG context and identity instruction
+    const systemInstruction = `You are an AI assistant specialized in analyzing engineering documents for the project "${project.name}". Your purpose is to help users understand these documents. Do not reveal you are Gemini or any other specific model.`;
+
+    // Generate DXF-aware system prompt (still useful for general document understanding)
+    const dxfAwarePrompt = generateDxfAwareSystemPrompt(processedDiagramNames);
+
     const currentUserParts = [
-        ...fileParts, // Include inlineData for all files
-        { text: contextText },
-        { text: message }
+        { text: systemInstruction },
+        { text: dxfAwarePrompt }, // Include the DXF-aware prompt
+        { text: contextTextFromRAG }, // Include the retrieved RAG context
+        { text: `User Query: ${message}` } // Clearly label the user's query
     ];
     contents.push({ role: "user", parts: currentUserParts });
 
@@ -224,7 +199,7 @@ export async function POST(request, context) {
     // console.log("Sending contents to Gemini:", JSON.stringify(contents.map(c => ({ role: c.role, parts: c.parts.map(p => p.text ? {text: '...'} : {inlineData: '...'}) })), null, 2));
 
 
-    console.log("Starting chat stream with Gemini 2.0 Flash (sending files each time)...");
+    console.log("Starting chat stream with Gemini 2.0 Flash (using RAG context)...");
 
     // --- Use Streaming with generateContentStream ALWAYS ---
     const encoder = new TextEncoder();
@@ -236,31 +211,13 @@ export async function POST(request, context) {
           // Use generateContentStreamWithRetry to initiate the stream
           const resultStream = await generateContentStreamWithRetry(
               gemini,
-              { contents },
+              { contents }, // Use the RAG-augmented contents
               3, // maxRetries
               (attempt, max) => {
                   // Optional: Could try to send a retry message, but difficult in plain text stream
                   console.log(`Retrying Gemini stream initiation (${attempt}/${max})...`);
               }
           );
-
-          // In the POST function, after preparing fileParts and processedDiagramNames
-          
-          // Generate DXF-aware system prompt
-          const systemPrompt = generateDxfAwareSystemPrompt(processedDiagramNames);
-          
-          // Use the system prompt in the Gemini request
-          const geminiParts = [
-            {
-              text: systemPrompt,
-              role: "model"
-            },
-            ...fileParts,
-            {
-              text: message,
-              role: "user"
-            }
-          ];
 
           // Process the stream from Gemini (if initiation succeeded)
           for await (const chunk of resultStream.stream) {
@@ -331,3 +288,10 @@ export async function POST(request, context) {
     return NextResponse.json({ message: userMessage }, { status: 500 });
   }
 }
+
+// --- Configure API route to disable body parsing ---
+export const config = {
+api: {
+bodyParser: false,
+},
+};

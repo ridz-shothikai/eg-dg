@@ -426,7 +426,86 @@ await Project.findByIdAndUpdate(projectId, { $push: { diagrams: newDiagram._id }
 
 console.log(`File ${fileName} saved to DB for project ${projectId} with status PENDING.`);
 
+// --- RAG: Chunk, Embed, and Upsert to Pinecone (Batch Processing) ---
+let textContentToEmbed = null;
+if (parsedContentDetailedText) {
+    textContentToEmbed = parsedContentDetailedText;
+} else if (ocrText) {
+    textContentToEmbed = ocrText;
+}
+
+// console.log(parsedContentDetailedText, "parsedContentDetailedText");
+
+if (textContentToEmbed) {
+    try {
+        console.log(`Starting RAG processing for diagram ${newDiagram._id}...`);
+        // Import utilities here to avoid potential circular dependencies or issues
+        const { chunkText } = await import('@/lib/chunkingUtils');
+        const { generateEmbedding } = await import('@/lib/embeddingUtils');
+        const { upsertVectors } = await import('@/lib/pineconeUtils');
+
+        let chunks = await chunkText(textContentToEmbed);
+        console.log(`Chunked content into ${chunks.length} chunks.`);
+
+        // Filter out low-quality chunks
+        const minChunkLength = 50; // Define minimum chunk length
+        const filteredChunks = chunks.filter(chunk =>
+            chunk.length >= minChunkLength && !chunk.includes("No text content")
+        );
+        console.log(`Filtered down to ${filteredChunks.length} chunks after removing low-quality ones.`);
+
+        const batchSize = 50; // Define batch size
+        for (let i = 0; i < filteredChunks.length; i += batchSize) {
+            const batchChunks = filteredChunks.slice(i, i + batchSize);
+            const vectorsToUpsert = [];
+
+            for (let j = 0; j < batchChunks.length; j++) {
+                const chunk = batchChunks[j];
+                const globalChunkIndex = i + j; // Calculate global index
+                const embedding = await generateEmbedding(chunk);
+
+                vectorsToUpsert.push({
+                    id: `${newDiagram._id}-${globalChunkIndex}`, // Unique ID for each chunk vector
+                    values: embedding,
+                    metadata: {
+                        projectId: projectId,
+                        diagramId: newDiagram._id.toString(),
+                        chunkIndex: globalChunkIndex,
+                        text: chunk, // Store the chunk text in metadata
+                        fileName: fileName,
+                        fileType: originalFileType || fileType,
+                    },
+                });
+            }
+
+            if (vectorsToUpsert.length > 0) {
+                await upsertVectors(vectorsToUpsert);
+                console.log(`Successfully upserted batch of ${vectorsToUpsert.length} vectors (chunks ${i} to ${Math.min(i + batchSize - 1, filteredChunks.length - 1)}) to Pinecone for diagram ${newDiagram._id}.`);
+            } else {
+                 console.log(`No vectors to upsert in batch starting at index ${i}.`);
+            }
+        }
+
+        if (filteredChunks.length > 0) {
+             console.log(`Finished RAG processing for diagram ${newDiagram._id}. Total chunks processed: ${filteredChunks.length}.`);
+        } else {
+             console.log(`No meaningful chunks generated for diagram ${newDiagram._id}.`);
+        }
+
+
+    } catch (ragError) {
+        console.error(`Error during RAG processing for diagram ${newDiagram._id}:`, ragError);
+        // Decide how to handle RAG errors - maybe update diagram status to indicate partial failure?
+        // For now, just log the error and allow the upload to complete without RAG data for this file.
+    }
+} else {
+    console.log(`No text content available for RAG processing for diagram ${newDiagram._id}.`);
+}
+// --- End RAG Processing ---
+
+
 // --- Trigger background preparation task (DO NOT await this) ---
+// This task can now potentially use the RAG data if needed, or continue with other processing.
 prepareDiagramInBackground(newDiagram._id.toString())
   .then(() => console.log(`Background preparation initiated for diagram ${newDiagram._id}`))
   .catch(err => console.error(`Failed to initiate background preparation for diagram ${newDiagram._id}:`, err));
