@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "dev-project-458711",
+  "private_key_id": "a7f363a9ebd1ab4ca0f0c38f7ddb0d8706e468cb",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCQZTpvjDkjO2Ht\nmSdbIUJGS5ijxzg+wIfds3/n+frBgMcGdrHVMLl9z86e0SuOPsR/3W4ZAx20aNGj\n/7ZPJOdorw6aX3rMQiZSWlQaefNTEwTKDTDwdDWkrpnjFOGAb/BgUK+qIf1m45IJ\nuGlHgUBBuUWVzSRkWLLS9r+5EzR6NcAoxn0Oi566woLa7lMsd4AtjJP1FwHHvtky\nii0O6wamVklZ35rmPpjCCFCNY4VLrk6W9tinRX7ik1tjg28bqiPrTBNxpGndHWXd\n9rLqqSU8d5o2TtxPsC5EbdyPD6QFo5yH/34t6w0tM/K/BhWur/M5GPpWsWV7Fcfd\nDgRPosWHAgMBAAECggEAC9vUcG7SuSWvsDoWH7IxOuFggtWMtVKjQJOfsJHjhIV/\n/Z7n51CzcIq4NxY0qTUBzFfc1T8KmdN19thnGkQ3S8NSGV7iuz2/ifSTLa1691qm\nLQs89rKEk/wm9UhfZhNLaY2W2mEk6jtMYMdSwNBI/QeAmIHwODGKANt0+XfYpSSq\nCS6/nqeb/9e4e2mUDX2nhvon4uel7ccrH4jgaC5bKk9KGptX918ZxWyeKyGEJIyb\nZB0kvp9jTksTV24utGQu5+3UWBQCazhCozLJJEEabwiQwumw+a02WhyxvvllYiZX\nSzPICAM4sq56PU4MoHBeUMxXxMJK1WKtinAXtIrrYQKBgQDAiNiIwKMHjSUaeIIl\nnzt2ZdUBOxs/YztC6j+KrN/X6nSARkoc3bqvfCnZrM+zHaXn4zHKbTGie7hVJ/Qg\ngiA+B12iIzEfJMDy1zS/Jx0YwQaHawltoHd06PxYRmt0UN+eKR+4dc0hN1DdRX3L\nCi77Fy87Li5Ay9SbrzYAt6loFwKBgQC//iFhG/z61TlyUZ01ifuCm5PsWSK0nF09\ndvNsIG8Qc8E7kMvMQZqDQcqykJ+GPAMsDfCM/lD3izEBAiRlEdzRYqbhBT/6vW8V\nv9Y+1Q3xPOmHUQdSBKbUwQENhNFSj0h/u2V+GV8IjOxIfQ3eHL5KJ6cZjgpiY570\nWbbfJWGEEQKBgE0vTydbmr/vPJ2lC//LGwp2/nJ04JKD1IEZ6YlNjps/mZ7HDvUN\nisbJDvn9xnI3A4i30wEkz04lLRuuXbcek5BqYYYbd5jVoih4T+QF6StATr7BEVGK\nj/klYex9ppxFw6/jKp1HVInpZBigwDJCjd0JSVz/QXmmfUBAeHTHLDnXAoGACoFb\nTjb71rXIGOtCUOWl73WX2HzgG0XbDDvwAeCccygCUMIRhLGqRLha4P5s3Cl4evag\nTPa1c3YYTlfRqf4aORLO0s04vP2UkHoYvQNnaeXNWWwjnGdIwad16Ul1MrFIZETa\nvtWgj5U2cJj3I0orV19oE0vkYZHV5sTp7rfa6CECgYArqN1D3+Zw/ljDUIqlJgm/\njk/KigYOvUVAP0xQBa6sJAZUHvCjFGsYxJkhnfWOldYQR1hx2ThsL5F18qM1jbsY\nz60+mZEmeyUwkzc0ITXzs+V1k/2R266bYWzMROS5CR7kCf/7h/4Bbn/JiUD62PCj\n976HIDrcAULurfC1PXPl2g==\n-----END PRIVATE KEY-----\n",
+  "client_email": "georgia-project@dev-project-458711.iam.gserviceaccount.com",
+  "client_id": "109996904691774822959",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/georgia-project%40dev-project-458711.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
