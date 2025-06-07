@@ -48,3 +48,7 @@ NUL
 
 # Ignore specific embedded/external repository paths
 CUsersuserDocumentsClaudeMCP/
+
+# secret files
+sa.json
+src/sa.json
