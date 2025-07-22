@@ -14,6 +14,7 @@ async function initPineconeClient() {
     try {
       pineconeClient = new Pinecone({
         apiKey: PINECONE_API_KEY,
+        
       });
       console.log("Pinecone client initialized.");
     } catch (error) {

@@ -9,6 +9,6 @@ export const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || 'YOUR_NEXTAUTH_SEC
 export const CLOUDCONVERT_API_KEY = process.env.CLOUDCONVERT_API_KEY || '';
 
 // Pinecone Configuration
-export const PINECONE_API_KEY = process.env.PINECONE_API_KEY || 'pcsk_6JSRtj_GcYThJiEoT96cuLZYncFR7i6mBs5Adj1qkdqtzsn44Mbs69ymfA7Ezz4uYGtDsJ'; // Replace with your Pinecone API Key
+export const PINECONE_API_KEY = process.env.PINECONE_API_KEY || 'pcsk_4gPEqV_LBttWyueHkZ78mSxGkUArirNbXFmwMRf13SLFUeSc9HuqMvSdSDJLH7nWDGgVcV'; // Replace with your Pinecone API Key
 export const PINECONE_ENVIRONMENT = process.env.PINECONE_ENVIRONMENT || 'us-east-1'; // Replace with your Pinecone Environment
 export const PINECONE_INDEX_NAME = process.env.PINECONE_INDEX_NAME || 'eg-dg'; // Replace with your Pinecone Index Name
