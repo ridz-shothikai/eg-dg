@@ -9,6 +9,7 @@ RUN npm install
 
 # Copy source and build Next.js app
 COPY . . 
+
 RUN npm run build
 
 # Use a smaller production-ready Node.js base image
