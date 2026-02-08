@@ -14,7 +14,7 @@ import { generateContentWithRetry } from '@/lib/geminiUtils'; // Import the retr
 import { fetchWithRetry } from '@/lib/fetchUtils'; // Import fetch retry helper for PDF API
 
 
-const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
+const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID, GOOGLE_CLOUD_KEYFILE } = constants;
 // Define the new API endpoint
 const HTML_TO_PDF_API_URL = 'https://html-text-to-pdf.shothik.ai/convert';
 

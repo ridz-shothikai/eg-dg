@@ -3,13 +3,12 @@ import { Storage } from "@google-cloud/storage";
 import html_to_pdf from "html-pdf-node";
 import path from "path";
 
-const { GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
+const { GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID, GOOGLE_CLOUD_KEYFILE } = constants;
 
 // --- Initialize GCS Storage ---
 let storage = null;
 if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
   try {
-    const { GOOGLE_CLOUD_KEYFILE } = constants;
     const storageOptions = { projectId: GOOGLE_CLOUD_PROJECT_ID };
     if (GOOGLE_CLOUD_KEYFILE) {
       storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;

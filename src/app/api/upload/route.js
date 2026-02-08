@@ -21,6 +21,7 @@ const {
   GOOGLE_CLOUD_PROJECT_ID,
   GCS_BUCKET_NAME,
   GOOGLE_AI_STUDIO_API_KEY,
+  GOOGLE_CLOUD_KEYFILE,
 } = constants;
 
 const gcpProjectId = GOOGLE_CLOUD_PROJECT_ID; // Renamed to avoid conflict

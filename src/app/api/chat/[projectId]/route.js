@@ -23,13 +23,12 @@ import { generateContentWithRetry, generateDxfAwareSystemPrompt } from '@/lib/ge
 import { generateEmbedding } from '@/lib/embeddingUtils';
 import { queryVectors } from '@/lib/pineconeUtils';
 
-const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants; // Added GCS_BUCKET_NAME and GOOGLE_CLOUD_PROJECT_ID
+const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID, GOOGLE_CLOUD_KEYFILE } = constants; // Added GCS_BUCKET_NAME and GOOGLE_CLOUD_PROJECT_ID
 
 // --- Initialize GCS Storage ---
 let storage = null;
 if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
   try {
-    const { GOOGLE_CLOUD_KEYFILE } = constants;
     const storageOptions = { projectId: GOOGLE_CLOUD_PROJECT_ID };
     if (GOOGLE_CLOUD_KEYFILE) {
       storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;

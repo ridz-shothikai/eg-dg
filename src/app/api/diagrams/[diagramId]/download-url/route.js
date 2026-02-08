@@ -13,6 +13,7 @@ const {
   MONGODB_URI,
   GOOGLE_CLOUD_PROJECT_ID,
   GCS_BUCKET_NAME,
+  GOOGLE_CLOUD_KEYFILE
 } = constants;
 
 const gcpProjectId = GOOGLE_CLOUD_PROJECT_ID;

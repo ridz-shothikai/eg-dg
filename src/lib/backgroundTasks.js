@@ -15,6 +15,7 @@ const {
     GOOGLE_CLOUD_PROJECT_ID,
     GCS_BUCKET_NAME,
     GOOGLE_AI_STUDIO_API_KEY,
+    GOOGLE_CLOUD_KEYFILE,
 } = constants;
 
 const gcpProjectId = GOOGLE_CLOUD_PROJECT_ID;
@@ -25,7 +26,6 @@ const geminiApiKey = GOOGLE_AI_STUDIO_API_KEY;
 let storage;
 let bucket;
 try {
-    const { GOOGLE_CLOUD_KEYFILE } = constants;
     const storageOptions = { projectId: gcpProjectId };
     if (GOOGLE_CLOUD_KEYFILE) {
         storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;

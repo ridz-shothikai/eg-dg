@@ -10,7 +10,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import * as constants from '@/constants';
 
-const { GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
+const { GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID, GOOGLE_CLOUD_KEYFILE } = constants;
 
 // --- Initialize GCS Storage ---
 let storage = null;
