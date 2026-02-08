@@ -21,7 +21,7 @@
     "dxf-parser": "^1.1.2",
     "emitter": "^0.0.5",
     "html-pdf-node": "^1.0.8",
-    "langchain": "^0.3.27",
+    "langchain": "^0.3.37",
     "mime-types": "^3.0.1",
     "mongoose": "^8.13.0",
     "next": "15.3.6",
