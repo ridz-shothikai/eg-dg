@@ -11,10 +11,10 @@ import * as constants from '@/constants';
 
 // --- Constants ---
 const {
-  MONGODB_URI,
-  GOOGLE_CLOUD_PROJECT_ID,
-  GCS_BUCKET_NAME,
-  GOOGLE_AI_STUDIO_API_KEY,
+    MONGODB_URI,
+    GOOGLE_CLOUD_PROJECT_ID,
+    GCS_BUCKET_NAME,
+    GOOGLE_AI_STUDIO_API_KEY,
 } = constants;
 
 const gcpProjectId = GOOGLE_CLOUD_PROJECT_ID;
@@ -25,7 +25,12 @@ const geminiApiKey = GOOGLE_AI_STUDIO_API_KEY;
 let storage;
 let bucket;
 try {
-    storage = new Storage({ projectId: gcpProjectId, keyFilename: 'sa.json' });
+    const { GOOGLE_CLOUD_KEYFILE } = constants;
+    const storageOptions = { projectId: gcpProjectId };
+    if (GOOGLE_CLOUD_KEYFILE) {
+        storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;
+    }
+    storage = new Storage(storageOptions);
     bucket = storage.bucket(bucketName);
 } catch (e) {
     console.error("Failed to initialize Google Cloud Storage:", e);
@@ -35,12 +40,12 @@ try {
 // --- Initialize Gemini File Manager ---
 let fileManager = null;
 if (geminiApiKey) {
-  try {
-    fileManager = new GoogleAIFileManager(geminiApiKey);
-    console.log("Gemini File Manager initialized for background tasks.");
-  } catch(e) {
-     console.error("Failed to initialize Gemini File Manager for background tasks:", e);
-  }
+    try {
+        fileManager = new GoogleAIFileManager(geminiApiKey);
+        console.log("Gemini File Manager initialized for background tasks.");
+    } catch (e) {
+        console.error("Failed to initialize Gemini File Manager for background tasks:", e);
+    }
 } else {
     console.warn("Gemini API Key missing, Gemini file operations disabled in background tasks.");
 }
@@ -48,7 +53,7 @@ if (geminiApiKey) {
 // --- Helper: Update Diagram Progress ---
 // NOTE: Consider throttling this in a real-world scenario if updates are too frequent
 async function updateDiagramProgress(diagramId, progress) {
-     try {
+    try {
         await connectMongoDB();
         const roundedProgress = Math.max(0, Math.min(100, Math.round(progress))); // Ensure 0-100
         await Diagram.findByIdAndUpdate(diagramId, { $set: { uploadProgress: roundedProgress } });
@@ -107,8 +112,8 @@ async function uploadToGemini(diagramId, filePath, displayName) {
                 // Call the helper to update DB (don't await, let it run in background)
                 updateDiagramProgress(diagramId, percentCompleted);
             } else if (progressEvent && typeof progressEvent.percent === 'number') {
-                 // Alternative: SDK might provide percentage directly
-                 updateDiagramProgress(diagramId, progressEvent.percent);
+                // Alternative: SDK might provide percentage directly
+                updateDiagramProgress(diagramId, progressEvent.percent);
             }
         }
     };
@@ -124,49 +129,49 @@ async function uploadToGemini(diagramId, filePath, displayName) {
         console.log(`[BackgroundTask] Uploaded ${displayName} to Gemini as: ${uploadResult.file.name}`);
         return uploadResult.file; // Return the file object
     } catch (uploadError) {
-         console.error(`[BackgroundTask] Gemini upload failed for ${displayName}:`, uploadError);
-         throw uploadError; // Re-throw to be caught by the main function
+        console.error(`[BackgroundTask] Gemini upload failed for ${displayName}:`, uploadError);
+        throw uploadError; // Re-throw to be caught by the main function
     }
 }
 
 // --- Helper: Wait for Gemini File Active ---
 async function waitForFileActive(geminiFile) {
-  if (!fileManager || !geminiFile || !geminiFile.name) {
-      console.warn("[BackgroundTask] Skipping Gemini file polling (no manager or invalid file).");
-      return geminiFile?.state || 'UNKNOWN'; // Return current state or unknown
-  }
-
-  let currentFile = geminiFile;
-  let attempts = 0;
-  const maxAttempts = 24; // Wait up to 2 minutes (24 * 5s) - Increased wait time
-  const pollInterval = 5000; // 5 seconds
-
-  console.log(`[BackgroundTask] Waiting for Gemini file ${currentFile.name} (Initial state: ${currentFile.state}). Polling every ${pollInterval / 1000}s...`);
-
-  while (currentFile.state === "PROCESSING" && attempts < maxAttempts) {
-    attempts++;
-    await new Promise((resolve) => setTimeout(resolve, pollInterval));
-    try {
-      currentFile = await fileManager.getFile(geminiFile.name);
-      console.log(`[BackgroundTask] -> Polled ${currentFile.name}: ${currentFile.state} (Attempt ${attempts}/${maxAttempts})`);
-    } catch (error) {
-       console.error(`[BackgroundTask] Error polling file state for ${geminiFile.name} (Attempt ${attempts}):`, error);
-       // Don't assume failure immediately, maybe a transient API error
-       if (attempts >= maxAttempts) {
-           console.error(`[BackgroundTask] Max polling attempts reached for ${geminiFile.name}. Assuming failure.`);
-           return 'FAILED'; // Assume failure after max attempts with errors
-       }
-       // Continue polling on error unless max attempts reached
+    if (!fileManager || !geminiFile || !geminiFile.name) {
+        console.warn("[BackgroundTask] Skipping Gemini file polling (no manager or invalid file).");
+        return geminiFile?.state || 'UNKNOWN'; // Return current state or unknown
     }
-  }
 
-   if (currentFile.state !== "ACTIVE") {
-     console.warn(`[BackgroundTask] File ${currentFile.name} did not become ACTIVE. Final state: ${currentFile.state}`);
-   } else {
-     console.log(`[BackgroundTask] File ${currentFile.name} is ACTIVE.`);
-   }
+    let currentFile = geminiFile;
+    let attempts = 0;
+    const maxAttempts = 24; // Wait up to 2 minutes (24 * 5s) - Increased wait time
+    const pollInterval = 5000; // 5 seconds
 
-  return currentFile.state; // Return the final state ('ACTIVE', 'FAILED', etc.)
+    console.log(`[BackgroundTask] Waiting for Gemini file ${currentFile.name} (Initial state: ${currentFile.state}). Polling every ${pollInterval / 1000}s...`);
+
+    while (currentFile.state === "PROCESSING" && attempts < maxAttempts) {
+        attempts++;
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        try {
+            currentFile = await fileManager.getFile(geminiFile.name);
+            console.log(`[BackgroundTask] -> Polled ${currentFile.name}: ${currentFile.state} (Attempt ${attempts}/${maxAttempts})`);
+        } catch (error) {
+            console.error(`[BackgroundTask] Error polling file state for ${geminiFile.name} (Attempt ${attempts}):`, error);
+            // Don't assume failure immediately, maybe a transient API error
+            if (attempts >= maxAttempts) {
+                console.error(`[BackgroundTask] Max polling attempts reached for ${geminiFile.name}. Assuming failure.`);
+                return 'FAILED'; // Assume failure after max attempts with errors
+            }
+            // Continue polling on error unless max attempts reached
+        }
+    }
+
+    if (currentFile.state !== "ACTIVE") {
+        console.warn(`[BackgroundTask] File ${currentFile.name} did not become ACTIVE. Final state: ${currentFile.state}`);
+    } else {
+        console.log(`[BackgroundTask] File ${currentFile.name} is ACTIVE.`);
+    }
+
+    return currentFile.state; // Return the final state ('ACTIVE', 'FAILED', etc.)
 }
 
 // --- Main Background Task Function ---

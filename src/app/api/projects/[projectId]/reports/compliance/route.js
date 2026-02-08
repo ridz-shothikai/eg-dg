@@ -42,18 +42,20 @@ if (GOOGLE_AI_STUDIO_API_KEY) {
 // --- Initialize GCS Storage ---
 let storage = null;
 if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
-    try {
-        const keyFilePath = path.join(process.cwd(), 'sa.json');
-        storage = new Storage({
-             projectId: GOOGLE_CLOUD_PROJECT_ID,
-             keyFilename: keyFilePath
-        });
-        console.log(`Compliance API: GCS Storage client initialized using keyfile ${keyFilePath} for bucket: ${GCS_BUCKET_NAME}`);
-    } catch(e) {
-        console.error("Compliance API: Failed to initialize GCS Storage client:", e);
+  try {
+    const storageOptions = { projectId: GOOGLE_CLOUD_PROJECT_ID };
+    if (GOOGLE_CLOUD_KEYFILE) {
+      storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;
+      console.log(`Compliance API: GCS Storage client initialized using keyfile ${GOOGLE_CLOUD_KEYFILE} for bucket: ${GCS_BUCKET_NAME}`);
+    } else {
+      console.log(`Compliance API: GCS Storage client initialized using default credentials (ADC) for bucket: ${GCS_BUCKET_NAME}`);
     }
+    storage = new Storage(storageOptions);
+  } catch (e) {
+    console.error("Compliance API: Failed to initialize GCS Storage client:", e);
+  }
 } else {
-    console.warn("Compliance API: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS functionality will be disabled.");
+  console.warn("Compliance API: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS functionality will be disabled.");
 }
 
 // Define relaxed safety settings
@@ -76,15 +78,15 @@ function sendSseMessage(controller, data, eventName = 'message') {
 
 // Function to load compliance rules
 async function loadComplianceRules() {
-    try {
-        const [ibcData, euroData, isData] = await Promise.all([
-            fs.readFile(ibcRulesPath, 'utf-8'),
-            fs.readFile(eurocodesRulesPath, 'utf-8'),
-            fs.readFile(isRulesPath, 'utf-8')
-        ]);
-        // Combine or structure rules as needed for the prompt
-        // Keep this simple text format for the prompt
-        return `
+  try {
+    const [ibcData, euroData, isData] = await Promise.all([
+      fs.readFile(ibcRulesPath, 'utf-8'),
+      fs.readFile(eurocodesRulesPath, 'utf-8'),
+      fs.readFile(isRulesPath, 'utf-8')
+    ]);
+    // Combine or structure rules as needed for the prompt
+    // Keep this simple text format for the prompt
+    return `
 IBC Rules:
 ---
 ${ibcData}
@@ -100,10 +102,10 @@ IS Rules:
 ${isData}
 ---
 `;
-    } catch (error) {
-        console.error("Failed to load compliance rules:", error);
-        return "Error: Compliance rules could not be loaded."; // Or handle differently
-    }
+  } catch (error) {
+    console.error("Failed to load compliance rules:", error);
+    return "Error: Compliance rules could not be loaded."; // Or handle differently
+  }
 }
 
 // GET handler for SSE connection (Compliance Report)
@@ -133,7 +135,7 @@ export async function GET(request, { params }) {
 
     if (session && session.user && session.user.id) {
       userId = session.user.id;
-    // --- UPDATED: Check header OR query parameter ---
+      // --- UPDATED: Check header OR query parameter ---
     } else if (guestIdHeader || guestIdQuery) {
       // Prioritize header, fallback to query parameter
       const effectiveGuestId = guestIdHeader || guestIdQuery;
@@ -149,29 +151,29 @@ export async function GET(request, { params }) {
     project = await Project.findById(projectId);
 
     if (!project) {
-        return new Response("Project not found", { status: 404 });
+      return new Response("Project not found", { status: 404 });
     }
 
     // Verify ownership or guest access
     if (userId) {
-        if (!project.owner || project.owner.toString() !== userId) {
-             return new Response("Forbidden", { status: 403 });
-        }
+      if (!project.owner || project.owner.toString() !== userId) {
+        return new Response("Forbidden", { status: 403 });
+      }
     } else if (isGuest) {
-        // Use the effective guest ID (header or query) for comparison
-        const effectiveGuestId = guestIdHeader || guestIdQuery;
-        if (!project.guestOwnerId || project.guestOwnerId !== effectiveGuestId) {
-             console.log(`Compliance Report API: Guest ID mismatch: EffectiveID=${effectiveGuestId}, Project=${project.guestOwnerId}`);
-             return new Response("Forbidden (Guest Access Denied)", { status: 403 });
-        }
+      // Use the effective guest ID (header or query) for comparison
+      const effectiveGuestId = guestIdHeader || guestIdQuery;
+      if (!project.guestOwnerId || project.guestOwnerId !== effectiveGuestId) {
+        console.log(`Compliance Report API: Guest ID mismatch: EffectiveID=${effectiveGuestId}, Project=${project.guestOwnerId}`);
+        return new Response("Forbidden (Guest Access Denied)", { status: 403 });
+      }
     } else {
-         return new Response("Unauthorized", { status: 401 });
+      return new Response("Unauthorized", { status: 401 });
     }
     // Authorization passed
 
   } catch (authOrDbError) {
-       console.error("Compliance SSE Auth/DB Error:", authOrDbError);
-       return new Response("Error processing request", { status: 500 });
+    console.error("Compliance SSE Auth/DB Error:", authOrDbError);
+    return new Response("Error processing request", { status: 500 });
   }
   // --- End Authorization Check ---
 
@@ -183,7 +185,7 @@ export async function GET(request, { params }) {
 
       try {
         if (!project) {
-             throw new Error('Project data unavailable after authorization.');
+          throw new Error('Project data unavailable after authorization.');
         }
 
         sendSseMessage(controller, { status: 'Fetching diagram list...' });
@@ -196,31 +198,31 @@ export async function GET(request, { params }) {
         const processedDiagramNames = [];
 
         for (const diag of diagrams) {
-            const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
-            const objectPath = diag.storagePath.startsWith(gcsPrefix) ? diag.storagePath.substring(gcsPrefix.length) : diag.storagePath;
+          const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
+          const objectPath = diag.storagePath.startsWith(gcsPrefix) ? diag.storagePath.substring(gcsPrefix.length) : diag.storagePath;
 
-            try {
-                sendSseMessage(controller, { status: `Downloading ${diag.fileName} from GCS...` });
-                const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
-                const base64Data = fileBuffer.toString('base64');
-                fileParts.push({ inlineData: { mimeType: mime.lookup(diag.fileName) || 'application/octet-stream', data: base64Data } });
-                processedDiagramNames.push(diag.fileName);
-                sendSseMessage(controller, { status: `Prepared ${diag.fileName}.` });
-            } catch (downloadError) {
-                 console.error(`Compliance SSE: FATAL ERROR downloading GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
-                 // Fail Fast: Send error via SSE and throw to stop execution
-                 const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
-                 sendSseMessage(controller, { message: userMessage }, 'error');
-                 throw new Error(userMessage); // Stop the stream processing
-            }
+          try {
+            sendSseMessage(controller, { status: `Downloading ${diag.fileName} from GCS...` });
+            const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
+            const base64Data = fileBuffer.toString('base64');
+            fileParts.push({ inlineData: { mimeType: mime.lookup(diag.fileName) || 'application/octet-stream', data: base64Data } });
+            processedDiagramNames.push(diag.fileName);
+            sendSseMessage(controller, { status: `Prepared ${diag.fileName}.` });
+          } catch (downloadError) {
+            console.error(`Compliance SSE: FATAL ERROR downloading GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
+            // Fail Fast: Send error via SSE and throw to stop execution
+            const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
+            sendSseMessage(controller, { message: userMessage }, 'error');
+            throw new Error(userMessage); // Stop the stream processing
+          }
         }
 
         // Check if *any* files were processed (redundant with fail-fast, but safe)
         if (fileParts.length !== diagrams.length) {
-             const errMsg = `Mismatch in prepared files. Expected ${diagrams.length}, got ${fileParts.length}.`;
-             console.error("Compliance SSE:", errMsg);
-             sendSseMessage(controller, { message: "An inconsistency occurred while preparing documents." }, 'error');
-             throw new Error(errMsg);
+          const errMsg = `Mismatch in prepared files. Expected ${diagrams.length}, got ${fileParts.length}.`;
+          console.error("Compliance SSE:", errMsg);
+          sendSseMessage(controller, { message: "An inconsistency occurred while preparing documents." }, 'error');
+          throw new Error(errMsg);
         }
         sendSseMessage(controller, { status: `Using ${fileParts.length} downloaded files.` });
         // --- End File Preparation ---
@@ -231,34 +233,34 @@ export async function GET(request, { params }) {
 
         // --- Step 1 & 3 Combined Try Block for Gemini Calls ---
         try {
-            // --- Step 1: Perform OCR ---
-            const diagramNamesString = processedDiagramNames.join(', ');
-            const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract text relevant to components, materials, dimensions, specifications, and safety notes.`;
-            sendSseMessage(controller, { status: 'Analyzing key Information...' });
+          // --- Step 1: Perform OCR ---
+          const diagramNamesString = processedDiagramNames.join(', ');
+          const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract text relevant to components, materials, dimensions, specifications, and safety notes.`;
+          sendSseMessage(controller, { status: 'Analyzing key Information...' });
 
-            // Use generateContentWithRetry for OCR
-            const ocrResult = await generateContentWithRetry(
-                gemini,
-                {
-                    contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...fileParts] }],
-                    safetySettings: relaxedSafetySettings // Apply safety settings for OCR
-                },
-                3, // maxRetries
-                (attempt, max) => sendSseMessage(controller, { status: `Retrying text extraction (${attempt}/${max})...` }) // onRetry callback
-            );
-            ocrText = ocrResult.response.text(); // Get text from result
+          // Use generateContentWithRetry for OCR
+          const ocrResult = await generateContentWithRetry(
+            gemini,
+            {
+              contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...fileParts] }],
+              safetySettings: relaxedSafetySettings // Apply safety settings for OCR
+            },
+            3, // maxRetries
+            (attempt, max) => sendSseMessage(controller, { status: `Retrying text extraction (${attempt}/${max})...` }) // onRetry callback
+          );
+          ocrText = ocrResult.response.text(); // Get text from result
 
-            if (!ocrText) throw new Error("OCR process returned empty text after retries."); // Updated error message
-            sendSseMessage(controller, { status: 'Text extraction complete.' });
+          if (!ocrText) throw new Error("OCR process returned empty text after retries."); // Updated error message
+          sendSseMessage(controller, { status: 'Text extraction complete.' });
 
-            // --- Step 2: Load Compliance Rules ---
-            sendSseMessage(controller, { status: 'Loading compliance rules...' });
-            const complianceRulesText = await loadComplianceRules();
-            if (complianceRulesText.startsWith("Error:")) throw new Error(complianceRulesText); // Propagate rule loading error
+          // --- Step 2: Load Compliance Rules ---
+          sendSseMessage(controller, { status: 'Loading compliance rules...' });
+          const complianceRulesText = await loadComplianceRules();
+          if (complianceRulesText.startsWith("Error:")) throw new Error(complianceRulesText); // Propagate rule loading error
 
-            // --- Step 3: Generate Compliance Report as HTML ---
-            // Updated Prompt: Instruct AI to use both OCR text and original files
-            const compliancePrompt = `Analyze the following OCR text extracted from the provided engineering diagram files (Project: ${project.name}), and considering the content of the files themselves, against the provided compliance rules (IBC, Eurocodes, IS) and generate a Compliance Report in **HTML format**.
+          // --- Step 3: Generate Compliance Report as HTML ---
+          // Updated Prompt: Instruct AI to use both OCR text and original files
+          const compliancePrompt = `Analyze the following OCR text extracted from the provided engineering diagram files (Project: ${project.name}), and considering the content of the files themselves, against the provided compliance rules (IBC, Eurocodes, IS) and generate a Compliance Report in **HTML format**.
 
 **Instructions for HTML Structure:**
 1.  Use standard HTML tags: \`<h1>\`, \`<h2>\`, \`<h3>\` for headings, \`<p>\` for paragraphs, \`<ul>\`/\`<ol>\`/\`<li>\` for lists.
@@ -289,50 +291,50 @@ ${ocrText}
 
 Generate the Compliance Report in HTML format now, using the OCR text, the provided diagram files, and the compliance rules for context.`;
 
-            sendSseMessage(controller, { status: 'Analyzing compliance...' });
+          sendSseMessage(controller, { status: 'Analyzing compliance...' });
 
-            // Use generateContentWithRetry for Compliance analysis
-            const complianceResult = await generateContentWithRetry(
-                gemini,
-                {
-                    contents: [{ role: "user", parts: [{ text: compliancePrompt }, ...fileParts] }]
-                    // No special safety settings needed here by default
-                },
-                3, // maxRetries
-                (attempt, max) => sendSseMessage(controller, { status: `Retrying compliance analysis (${attempt}/${max})...` }) // onRetry callback
-            );
-            complianceReportHtml = complianceResult.response.text(); // Get text from result
+          // Use generateContentWithRetry for Compliance analysis
+          const complianceResult = await generateContentWithRetry(
+            gemini,
+            {
+              contents: [{ role: "user", parts: [{ text: compliancePrompt }, ...fileParts] }]
+              // No special safety settings needed here by default
+            },
+            3, // maxRetries
+            (attempt, max) => sendSseMessage(controller, { status: `Retrying compliance analysis (${attempt}/${max})...` }) // onRetry callback
+          );
+          complianceReportHtml = complianceResult.response.text(); // Get text from result
 
-            if (!complianceReportHtml) throw new Error("Compliance analysis failed after retries."); // Updated error message
-            sendSseMessage(controller, { status: 'Compliance analysis complete.' });
+          if (!complianceReportHtml) throw new Error("Compliance analysis failed after retries."); // Updated error message
+          sendSseMessage(controller, { status: 'Compliance analysis complete.' });
 
         } catch (geminiError) { // Catch errors from either OCR or Compliance generation
-            console.error("Compliance SSE: Error during Gemini processing (OCR or Compliance):", geminiError);
-            let userFriendlyError = "An unexpected error occurred during analysis. Please try again.";
-            // Determine if it was OCR or Compliance step if possible (less critical now)
-            if (geminiError.message && geminiError.message.includes("SAFETY")) {
-                userFriendlyError = "Analysis could not be completed due to content safety guidelines.";
-            } else if (geminiError.message && (geminiError.message.includes("Invalid content") || geminiError.message.includes("unsupported format"))) {
-                userFriendlyError = "There was an issue processing one or more files for analysis. Please check the file formats.";
-            } else if (geminiError.message && geminiError.message.includes("RESOURCE_EXHAUSTED")) {
-                userFriendlyError = "The analysis service is busy. Please try again shortly.";
-            } else if (geminiError.message === "OCR process returned empty text.") {
-                 userFriendlyError = "Failed to extract text from the documents (OCR). Please check the files.";
-            } else if (geminiError.message === "Compliance analysis failed.") {
-                 userFriendlyError = "Failed to generate the compliance analysis based on the extracted text.";
-            }
-            sendSseMessage(controller, { message: userFriendlyError }, 'error');
-            throw geminiError; // Re-throw to be caught by the main try...catch...finally
+          console.error("Compliance SSE: Error during Gemini processing (OCR or Compliance):", geminiError);
+          let userFriendlyError = "An unexpected error occurred during analysis. Please try again.";
+          // Determine if it was OCR or Compliance step if possible (less critical now)
+          if (geminiError.message && geminiError.message.includes("SAFETY")) {
+            userFriendlyError = "Analysis could not be completed due to content safety guidelines.";
+          } else if (geminiError.message && (geminiError.message.includes("Invalid content") || geminiError.message.includes("unsupported format"))) {
+            userFriendlyError = "There was an issue processing one or more files for analysis. Please check the file formats.";
+          } else if (geminiError.message && geminiError.message.includes("RESOURCE_EXHAUSTED")) {
+            userFriendlyError = "The analysis service is busy. Please try again shortly.";
+          } else if (geminiError.message === "OCR process returned empty text.") {
+            userFriendlyError = "Failed to extract text from the documents (OCR). Please check the files.";
+          } else if (geminiError.message === "Compliance analysis failed.") {
+            userFriendlyError = "Failed to generate the compliance analysis based on the extracted text.";
+          }
+          sendSseMessage(controller, { message: userFriendlyError }, 'error');
+          throw geminiError; // Re-throw to be caught by the main try...catch...finally
         }
 
         // --- Clean up Gemini's Markdown code fences (applied to complianceReportHtml) ---
         console.log("Cleaning Gemini HTML output...");
         complianceReportHtml = complianceReportHtml.trim();
         if (complianceReportHtml.startsWith('```html')) {
-            complianceReportHtml = complianceReportHtml.substring(7).trimStart();
+          complianceReportHtml = complianceReportHtml.substring(7).trimStart();
         }
         if (complianceReportHtml.endsWith('```')) {
-            complianceReportHtml = complianceReportHtml.substring(0, complianceReportHtml.length - 3).trimEnd();
+          complianceReportHtml = complianceReportHtml.substring(0, complianceReportHtml.length - 3).trimEnd();
         }
         console.log("HTML output cleaned.");
         // --- End cleanup ---
@@ -436,41 +438,41 @@ Generate the Compliance Report in HTML format now, using the OCR text, the provi
 
         let pdfUrl = null;
         try {
-            console.log(`Calling HTML to PDF API: ${HTML_TO_PDF_API_URL}`);
-            // Use fetchWithRetry for PDF API call
-            const apiResponse = await fetchWithRetry(
-                HTML_TO_PDF_API_URL,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
-                },
-                3, // maxRetries
-                (attempt, max) => sendSseMessage(controller, { status: `Retrying PDF conversion (${attempt}/${max})...` }) // onRetry callback
-            );
+          console.log(`Calling HTML to PDF API: ${HTML_TO_PDF_API_URL}`);
+          // Use fetchWithRetry for PDF API call
+          const apiResponse = await fetchWithRetry(
+            HTML_TO_PDF_API_URL,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
+            },
+            3, // maxRetries
+            (attempt, max) => sendSseMessage(controller, { status: `Retrying PDF conversion (${attempt}/${max})...` }) // onRetry callback
+          );
 
-             // Reset status after retries finish (success or fail)
-            sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' });
+          // Reset status after retries finish (success or fail)
+          sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' });
 
-            if (!apiResponse.ok) {
-                const errorBody = await apiResponse.text();
-                console.error(`HTML to PDF API Error (${apiResponse.status}): ${errorBody}`);
-                throw new Error(`HTML to PDF conversion failed with status ${apiResponse.status}.`);
-            }
+          if (!apiResponse.ok) {
+            const errorBody = await apiResponse.text();
+            console.error(`HTML to PDF API Error (${apiResponse.status}): ${errorBody}`);
+            throw new Error(`HTML to PDF conversion failed with status ${apiResponse.status}.`);
+          }
 
-            const result = await apiResponse.json();
-            // --- UPDATED: Check for public_url instead of pdf_url ---
-            if (!result.public_url) { // Assuming success is implicit if public_url exists
-                 console.error("HTML to PDF API did not return public_url:", result);
-                 throw new Error("HTML to PDF conversion API call succeeded but response format was invalid (missing public_url).");
-            }
-            pdfUrl = result.public_url; // Use public_url
-            console.log("HTML to PDF API conversion successful. PDF URL:", pdfUrl);
-            sendSseMessage(controller, { status: 'PDF conversion complete.' });
+          const result = await apiResponse.json();
+          // --- UPDATED: Check for public_url instead of pdf_url ---
+          if (!result.public_url) { // Assuming success is implicit if public_url exists
+            console.error("HTML to PDF API did not return public_url:", result);
+            throw new Error("HTML to PDF conversion API call succeeded but response format was invalid (missing public_url).");
+          }
+          pdfUrl = result.public_url; // Use public_url
+          console.log("HTML to PDF API conversion successful. PDF URL:", pdfUrl);
+          sendSseMessage(controller, { status: 'PDF conversion complete.' });
 
         } catch (apiError) {
-             console.error("Error calling HTML to PDF API:", apiError);
-             throw new Error(`Failed to convert HTML to PDF: ${apiError.message}`);
+          console.error("Error calling HTML to PDF API:", apiError);
+          throw new Error(`Failed to convert HTML to PDF: ${apiError.message}`);
         }
         // --- End API Call ---
 
@@ -482,8 +484,8 @@ Generate the Compliance Report in HTML format now, using the OCR text, the provi
         console.error(`Compliance SSE Error for project ${projectId}:`, error);
         // Use the user-friendly message if it was generated by our specific handlers, otherwise use a generic one
         const finalErrorMessage = error.message.startsWith('Failed to load required file') || error.message.includes('analysis service') || error.message.includes('content safety') || error.message.includes('processing one or more files')
-            ? error.message
-            : 'An internal error occurred during compliance report generation.';
+          ? error.message
+          : 'An internal error occurred during compliance report generation.';
         try { sendSseMessage(controller, { message: finalErrorMessage }, 'error'); }
         catch (sseError) { console.error("Compliance SSE Error: Failed to send error message:", sseError); }
       } finally {

@@ -26,21 +26,23 @@ import { queryVectors } from '@/lib/pineconeUtils';
 const { GOOGLE_AI_STUDIO_API_KEY, GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants; // Added GCS_BUCKET_NAME and GOOGLE_CLOUD_PROJECT_ID
 
 // --- Initialize GCS Storage ---
-// Keep GCS storage initialization for potential future use or other functionalities
 let storage = null;
 if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
-    try {
-        const keyFilePath = path.join(process.cwd(), 'sa.json');
-        storage = new Storage({
-             projectId: GOOGLE_CLOUD_PROJECT_ID,
-             keyFilename: keyFilePath
-        });
-        console.log(`Chat API: GCS Storage client initialized using keyfile ${keyFilePath} for bucket: ${GCS_BUCKET_NAME}`);
-    } catch(e) {
-        console.error("Chat API: Failed to initialize GCS Storage client:", e);
+  try {
+    const { GOOGLE_CLOUD_KEYFILE } = constants;
+    const storageOptions = { projectId: GOOGLE_CLOUD_PROJECT_ID };
+    if (GOOGLE_CLOUD_KEYFILE) {
+      storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;
+      console.log(`Chat API: GCS Storage client initialized using keyfile ${GOOGLE_CLOUD_KEYFILE} for bucket: ${GCS_BUCKET_NAME}`);
+    } else {
+      console.log(`Chat API: GCS Storage client initialized using default credentials (ADC) for bucket: ${GCS_BUCKET_NAME}`);
     }
+    storage = new Storage(storageOptions);
+  } catch (e) {
+    console.error("Chat API: Failed to initialize GCS Storage client:", e);
+  }
 } else {
-    console.warn("Chat API: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS download functionality will be disabled.");
+  console.warn("Chat API: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS download functionality will be disabled.");
 }
 
 
@@ -77,7 +79,7 @@ export async function POST(request, context) {
     return NextResponse.json({ message: 'Message is required' }, { status: 400 });
   }
   if (!gemini) { // Removed fileManager check
-     return NextResponse.json({ message: 'Chat functionality is disabled (Gemini not initialized)' }, { status: 503 });
+    return NextResponse.json({ message: 'Chat functionality is disabled (Gemini not initialized)' }, { status: 503 });
   }
 
   try {
@@ -104,22 +106,22 @@ export async function POST(request, context) {
     const project = await Project.findById(projectId);
 
     if (!project) {
-        return NextResponse.json({ message: 'Project not found' }, { status: 404 });
+      return NextResponse.json({ message: 'Project not found' }, { status: 404 });
     }
 
     // Authorization check
     if (userId) { // Authenticated user
-        if (!project.owner || project.owner.toString() !== userId) {
-            return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-        }
+      if (!project.owner || project.owner.toString() !== userId) {
+        return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+      }
     } else if (isGuest) { // Guest user
-        if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
-             console.log(`Chat API: Guest ID mismatch: Header=${guestIdHeader}, Project=${project.guestOwnerId}`);
-             return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
-        }
+      if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
+        console.log(`Chat API: Guest ID mismatch: Header=${guestIdHeader}, Project=${project.guestOwnerId}`);
+        return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
+      }
     } else {
-        // Should not happen due to initial check, but safeguard
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      // Should not happen due to initial check, but safeguard
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     // --- RAG: Query Pinecone for relevant document chunks ---
@@ -128,33 +130,33 @@ export async function POST(request, context) {
     let processedDiagramNames = []; // Still need diagram names for the system prompt
 
     try {
-        // Generate embedding for the user's message
-        const queryEmbedding = await generateEmbedding(message);
+      // Generate embedding for the user's message
+      const queryEmbedding = await generateEmbedding(message);
 
-        // Query Pinecone, filtering by projectId
-        // Adjust topK as needed to retrieve a suitable number of chunks
-        retrievedChunks = await queryVectors(queryEmbedding, 10, { projectId: projectId });
+      // Query Pinecone, filtering by projectId
+      // Adjust topK as needed to retrieve a suitable number of chunks
+      retrievedChunks = await queryVectors(queryEmbedding, 10, { projectId: projectId });
 
-        console.log(`Chat API: Retrieved ${retrievedChunks.length} chunks from Pinecone.`);
+      console.log(`Chat API: Retrieved ${retrievedChunks.length} chunks from Pinecone.`);
 
-        // Extract unique diagram names from retrieved chunks for the system prompt
-        const uniqueDiagramIds = [...new Set(retrievedChunks.map(chunk => chunk.metadata.diagramId))];
-        if (uniqueDiagramIds.length > 0) {
-             const diagramsInContext = await Diagram.find({ _id: { $in: uniqueDiagramIds } }).select('fileName');
-             processedDiagramNames = diagramsInContext.map(diag => diag.fileName);
-        } else {
-             // If no chunks retrieved, still include project name in prompt
-             processedDiagramNames = [`Project: ${project.name}`];
-        }
+      // Extract unique diagram names from retrieved chunks for the system prompt
+      const uniqueDiagramIds = [...new Set(retrievedChunks.map(chunk => chunk.metadata.diagramId))];
+      if (uniqueDiagramIds.length > 0) {
+        const diagramsInContext = await Diagram.find({ _id: { $in: uniqueDiagramIds } }).select('fileName');
+        processedDiagramNames = diagramsInContext.map(diag => diag.fileName);
+      } else {
+        // If no chunks retrieved, still include project name in prompt
+        processedDiagramNames = [`Project: ${project.name}`];
+      }
 
 
     } catch (ragError) {
-        console.error(`Error during Pinecone query for project ${projectId}:`, ragError);
-        // Decide how to handle RAG errors - maybe proceed without RAG context?
-        // For now, log and proceed without RAG context, relying only on chat history.
-        console.warn("Proceeding with chat without RAG context due to an error.");
-        retrievedChunks = []; // Ensure no chunks are used if there's an error
-        processedDiagramNames = [`Project: ${project.name} (Document context unavailable)`]; // Update prompt info
+      console.error(`Error during Pinecone query for project ${projectId}:`, ragError);
+      // Decide how to handle RAG errors - maybe proceed without RAG context?
+      // For now, log and proceed without RAG context, relying only on chat history.
+      console.warn("Proceeding with chat without RAG context due to an error.");
+      retrievedChunks = []; // Ensure no chunks are used if there's an error
+      processedDiagramNames = [`Project: ${project.name} (Document context unavailable)`]; // Update prompt info
     }
     // --- End RAG Query ---
 
@@ -164,20 +166,20 @@ export async function POST(request, context) {
 
     // Add previous history turns (text only)
     if (history && history.length > 0) {
-        history.forEach(item => {
-            contents.push({ role: item.role, parts: [{ text: item.text }] });
-        });
+      history.forEach(item => {
+        contents.push({ role: item.role, parts: [{ text: item.text }] });
+      });
     }
 
     // Prepare context text from retrieved chunks
     let contextTextFromRAG = "";
     if (retrievedChunks.length > 0) {
-        contextTextFromRAG = "Document Context:\n";
-        retrievedChunks.forEach(chunk => {
-            // Include filename and chunk text
-            contextTextFromRAG += `--- File: ${chunk.metadata.fileName} (Chunk ${chunk.metadata.chunkIndex}) ---\n${chunk.metadata.text}\n\n`;
-        });
-        contextTextFromRAG += "---\n"; // Separator
+      contextTextFromRAG = "Document Context:\n";
+      retrievedChunks.forEach(chunk => {
+        // Include filename and chunk text
+        contextTextFromRAG += `--- File: ${chunk.metadata.fileName} (Chunk ${chunk.metadata.chunkIndex}) ---\n${chunk.metadata.text}\n\n`;
+      });
+      contextTextFromRAG += "---\n"; // Separator
     }
 
 
@@ -188,10 +190,10 @@ export async function POST(request, context) {
     const dxfAwarePrompt = generateDxfAwareSystemPrompt(processedDiagramNames);
 
     const currentUserParts = [
-        { text: systemInstruction },
-        { text: dxfAwarePrompt }, // Include the DXF-aware prompt
-        { text: contextTextFromRAG }, // Include the retrieved RAG context
-        { text: `User Query: ${message}` } // Clearly label the user's query
+      { text: systemInstruction },
+      { text: dxfAwarePrompt }, // Include the DXF-aware prompt
+      { text: contextTextFromRAG }, // Include the retrieved RAG context
+      { text: `User Query: ${message}` } // Clearly label the user's query
     ];
     contents.push({ role: "user", parts: currentUserParts });
 
@@ -210,13 +212,13 @@ export async function POST(request, context) {
         try {
           // Use generateContentStreamWithRetry to initiate the stream
           const resultStream = await generateContentStreamWithRetry(
-              gemini,
-              { contents }, // Use the RAG-augmented contents
-              3, // maxRetries
-              (attempt, max) => {
-                  // Optional: Could try to send a retry message, but difficult in plain text stream
-                  console.log(`Retrying Gemini stream initiation (${attempt}/${max})...`);
-              }
+            gemini,
+            { contents }, // Use the RAG-augmented contents
+            3, // maxRetries
+            (attempt, max) => {
+              // Optional: Could try to send a retry message, but difficult in plain text stream
+              console.log(`Retrying Gemini stream initiation (${attempt}/${max})...`);
+            }
           );
 
           // Process the stream from Gemini (if initiation succeeded)
@@ -244,28 +246,28 @@ export async function POST(request, context) {
 
           controller.close(); // Close the stream when Gemini is done
         } catch (streamError) {
-           // --- Robust Gemini Error Handling ---
-           console.error("Error during Gemini stream processing:", streamError);
-           let userFriendlyError = "An unexpected error occurred during analysis. Please try again."; // Default message
+          // --- Robust Gemini Error Handling ---
+          console.error("Error during Gemini stream processing:", streamError);
+          let userFriendlyError = "An unexpected error occurred during analysis. Please try again."; // Default message
 
-           // Add specific checks based on potential Gemini errors
-           if (streamError.message && streamError.message.includes("RESOURCE_EXHAUSTED")) {
-               userFriendlyError = "The analysis service is currently busy. Please try again shortly.";
-           } else if (streamError.message && streamError.message.includes("API key not valid")) {
-               userFriendlyError = "Chat functionality is temporarily unavailable due to a configuration issue. Please contact support.";
-           } else if (streamError.message && (streamError.message.includes("Invalid content") || streamError.message.includes("unsupported format"))) {
-               userFriendlyError = "There was an issue processing one or more uploaded files. Please check the file formats or try uploading again.";
-           } else if (streamError.message && streamError.message.includes("SAFETY")) { // Check for safety blocks
-                userFriendlyError = "The request could not be completed due to content safety guidelines.";
-           }
-           // Add more specific error checks as needed
+          // Add specific checks based on potential Gemini errors
+          if (streamError.message && streamError.message.includes("RESOURCE_EXHAUSTED")) {
+            userFriendlyError = "The analysis service is currently busy. Please try again shortly.";
+          } else if (streamError.message && streamError.message.includes("API key not valid")) {
+            userFriendlyError = "Chat functionality is temporarily unavailable due to a configuration issue. Please contact support.";
+          } else if (streamError.message && (streamError.message.includes("Invalid content") || streamError.message.includes("unsupported format"))) {
+            userFriendlyError = "There was an issue processing one or more uploaded files. Please check the file formats or try uploading again.";
+          } else if (streamError.message && streamError.message.includes("SAFETY")) { // Check for safety blocks
+            userFriendlyError = "The request could not be completed due to content safety guidelines.";
+          }
+          // Add more specific error checks as needed
 
-           // Try to send the user-friendly error message through the stream with a specific prefix
-           try {
-                controller.enqueue(encoder.encode(`__CHAT_ERROR__:${userFriendlyError}`));
-           } catch (e) { /* Ignore if controller is already closed */ }
-           controller.close(); // Ensure stream is closed on error
-           // Note: DB saving might not happen if an error occurs mid-stream
+          // Try to send the user-friendly error message through the stream with a specific prefix
+          try {
+            controller.enqueue(encoder.encode(`__CHAT_ERROR__:${userFriendlyError}`));
+          } catch (e) { /* Ignore if controller is already closed */ }
+          controller.close(); // Ensure stream is closed on error
+          // Note: DB saving might not happen if an error occurs mid-stream
         }
       }
     });
@@ -283,15 +285,15 @@ export async function POST(request, context) {
     console.error(`Chat API error for project ${projectId} (outside stream):`, error);
     // Provide a generic user-friendly message for non-stream errors
     const userMessage = error.message.startsWith('Failed to load required file') // Check if it's our custom GCS error
-        ? error.message
-        : 'An unexpected error occurred before starting the chat. Please try again.';
+      ? error.message
+      : 'An unexpected error occurred before starting the chat. Please try again.';
     return NextResponse.json({ message: userMessage }, { status: 500 });
   }
 }
 
 // --- Configure API route to disable body parsing ---
 export const config = {
-api: {
-bodyParser: false,
-},
+  api: {
+    bodyParser: false,
+  },
 };

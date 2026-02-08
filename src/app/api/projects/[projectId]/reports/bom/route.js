@@ -35,18 +35,21 @@ if (GOOGLE_AI_STUDIO_API_KEY) {
 // --- Initialize GCS Storage ---
 let storage = null;
 if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
-    try {
-        const keyFilePath = path.join(process.cwd(), 'sa.json');
-        storage = new Storage({
-             projectId: GOOGLE_CLOUD_PROJECT_ID,
-             keyFilename: keyFilePath
-        });
-        console.log(`BoM API: GCS Storage client initialized using keyfile ${keyFilePath} for bucket: ${GCS_BUCKET_NAME}`);
-    } catch(e) {
-        console.error("BoM API: Failed to initialize GCS Storage client:", e);
+  try {
+    const { GOOGLE_CLOUD_KEYFILE } = constants;
+    const storageOptions = { projectId: GOOGLE_CLOUD_PROJECT_ID };
+    if (GOOGLE_CLOUD_KEYFILE) {
+      storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;
+      console.log(`BoM API: GCS Storage client initialized using keyfile ${GOOGLE_CLOUD_KEYFILE} for bucket: ${GCS_BUCKET_NAME}`);
+    } else {
+      console.log(`BoM API: GCS Storage client initialized using default credentials (ADC) for bucket: ${GCS_BUCKET_NAME}`);
     }
+    storage = new Storage(storageOptions);
+  } catch (e) {
+    console.error("BoM API: Failed to initialize GCS Storage client:", e);
+  }
 } else {
-    console.warn("BoM API: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS functionality will be disabled.");
+  console.warn("BoM API: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS functionality will be disabled.");
 }
 
 // Define relaxed safety settings (might be needed for OCR)
@@ -76,10 +79,10 @@ export async function GET(request, { params }) {
     return new Response("Invalid Project ID", { status: 400 });
   }
   if (!gemini) {
-     return new Response("Backend not ready (Gemini)", { status: 503 });
+    return new Response("Backend not ready (Gemini)", { status: 503 });
   }
-   if (!storage || !GCS_BUCKET_NAME) {
-     return new Response("Backend not ready (GCS config missing)", { status: 503 });
+  if (!storage || !GCS_BUCKET_NAME) {
+    return new Response("Backend not ready (GCS config missing)", { status: 503 });
   }
   // --- REMOVED Puppeteer dependency check ---
 
@@ -99,7 +102,7 @@ export async function GET(request, { params }) {
 
     if (session && session.user && session.user.id) {
       userId = session.user.id;
-    // --- UPDATED: Check header OR query parameter ---
+      // --- UPDATED: Check header OR query parameter ---
     } else if (guestIdHeader || guestIdQuery) {
       // Prioritize header, fallback to query parameter
       const effectiveGuestId = guestIdHeader || guestIdQuery;
@@ -115,29 +118,29 @@ export async function GET(request, { params }) {
     project = await Project.findById(projectId);
 
     if (!project) {
-        return new Response("Project not found", { status: 404 });
+      return new Response("Project not found", { status: 404 });
     }
 
     // Verify ownership or guest access
     if (userId) {
-        if (!project.owner || project.owner.toString() !== userId) {
-             return new Response("Forbidden", { status: 403 });
-        }
+      if (!project.owner || project.owner.toString() !== userId) {
+        return new Response("Forbidden", { status: 403 });
+      }
     } else if (isGuest) {
-        // Use the effective guest ID (header or query) for comparison
-        const effectiveGuestId = guestIdHeader || guestIdQuery;
-        if (!project.guestOwnerId || project.guestOwnerId !== effectiveGuestId) {
-             console.log(`BoM Report API: Guest ID mismatch: EffectiveID=${effectiveGuestId}, Project=${project.guestOwnerId}`);
-             return new Response("Forbidden (Guest Access Denied)", { status: 403 });
-        }
+      // Use the effective guest ID (header or query) for comparison
+      const effectiveGuestId = guestIdHeader || guestIdQuery;
+      if (!project.guestOwnerId || project.guestOwnerId !== effectiveGuestId) {
+        console.log(`BoM Report API: Guest ID mismatch: EffectiveID=${effectiveGuestId}, Project=${project.guestOwnerId}`);
+        return new Response("Forbidden (Guest Access Denied)", { status: 403 });
+      }
     } else {
-         return new Response("Unauthorized", { status: 401 });
+      return new Response("Unauthorized", { status: 401 });
     }
     // Authorization passed
 
   } catch (authOrDbError) {
-       console.error("BoM SSE Auth/DB Error:", authOrDbError);
-       return new Response("Error processing request", { status: 500 });
+    console.error("BoM SSE Auth/DB Error:", authOrDbError);
+    return new Response("Error processing request", { status: 500 });
   }
   // --- End Authorization Check ---
 
@@ -149,17 +152,17 @@ export async function GET(request, { params }) {
 
       try {
         if (!project) {
-             throw new Error('Project data unavailable after authorization.');
+          throw new Error('Project data unavailable after authorization.');
         }
 
         sendSseMessage(controller, { status: 'Fetching diagram list...' });
         const diagrams = await Diagram.find({
-            project: projectId,
-            storagePath: { $exists: true, $ne: null, $ne: '' }
+          project: projectId,
+          storagePath: { $exists: true, $ne: null, $ne: '' }
         }).select('fileName storagePath');
 
         if (diagrams.length === 0) {
-            throw new Error("No documents with storage paths found.");
+          throw new Error("No documents with storage paths found.");
         }
 
         // --- Prepare Inline Data by Downloading Directly from GCS (Fail Fast) ---
@@ -168,31 +171,31 @@ export async function GET(request, { params }) {
         const processedDiagramNames = [];
 
         for (const diag of diagrams) {
-            const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
-            const objectPath = diag.storagePath.startsWith(gcsPrefix) ? diag.storagePath.substring(gcsPrefix.length) : diag.storagePath;
+          const gcsPrefix = `gs://${GCS_BUCKET_NAME}/`;
+          const objectPath = diag.storagePath.startsWith(gcsPrefix) ? diag.storagePath.substring(gcsPrefix.length) : diag.storagePath;
 
-            try {
-                sendSseMessage(controller, { status: `Downloading ${diag.fileName} from GCS...` });
-                const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
-                const base64Data = fileBuffer.toString('base64');
-                fileParts.push({ inlineData: { mimeType: mime.lookup(diag.fileName) || 'application/octet-stream', data: base64Data } });
-                processedDiagramNames.push(diag.fileName);
-                sendSseMessage(controller, { status: `Prepared ${diag.fileName}.` });
-            } catch (downloadError) {
-                 console.error(`BoM SSE: FATAL ERROR downloading GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
-                 // Fail Fast: Send error via SSE and throw to stop execution
-                 const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
-                 sendSseMessage(controller, { message: userMessage }, 'error');
-                 throw new Error(userMessage); // Stop the stream processing
-            }
+          try {
+            sendSseMessage(controller, { status: `Downloading ${diag.fileName} from GCS...` });
+            const [fileBuffer] = await storage.bucket(GCS_BUCKET_NAME).file(objectPath).download();
+            const base64Data = fileBuffer.toString('base64');
+            fileParts.push({ inlineData: { mimeType: mime.lookup(diag.fileName) || 'application/octet-stream', data: base64Data } });
+            processedDiagramNames.push(diag.fileName);
+            sendSseMessage(controller, { status: `Prepared ${diag.fileName}.` });
+          } catch (downloadError) {
+            console.error(`BoM SSE: FATAL ERROR downloading GCS file ${objectPath} (${diag.fileName}):`, downloadError.message);
+            // Fail Fast: Send error via SSE and throw to stop execution
+            const userMessage = `Failed to load required file '${diag.fileName}'. Please ensure all project files are accessible and try again.`;
+            sendSseMessage(controller, { message: userMessage }, 'error');
+            throw new Error(userMessage); // Stop the stream processing
+          }
         }
 
         // Check if *any* files were processed (redundant with fail-fast, but safe)
         if (fileParts.length !== diagrams.length) {
-             const errMsg = `Mismatch in prepared files. Expected ${diagrams.length}, got ${fileParts.length}.`;
-             console.error("BoM SSE:", errMsg);
-             sendSseMessage(controller, { message: "An inconsistency occurred while preparing documents." }, 'error');
-             throw new Error(errMsg);
+          const errMsg = `Mismatch in prepared files. Expected ${diagrams.length}, got ${fileParts.length}.`;
+          console.error("BoM SSE:", errMsg);
+          sendSseMessage(controller, { message: "An inconsistency occurred while preparing documents." }, 'error');
+          throw new Error(errMsg);
         }
         sendSseMessage(controller, { status: `Using ${fileParts.length} downloaded files.` });
         // --- End File Preparation ---
@@ -200,43 +203,43 @@ export async function GET(request, { params }) {
         let ocrText = '';
         // --- Step 1: Perform OCR with Error Handling ---
         try {
-            const diagramNamesString = processedDiagramNames.join(', ');
-            const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract all text content accurately. Focus on text relevant to components, materials, dimensions, and quantities.`;
-            sendSseMessage(controller, { status: 'Analyzing key Information...' });
+          const diagramNamesString = processedDiagramNames.join(', ');
+          const ocrPrompt = `Perform OCR on the following document(s): ${diagramNamesString}. Extract all text content accurately. Focus on text relevant to components, materials, dimensions, and quantities.`;
+          sendSseMessage(controller, { status: 'Analyzing key Information...' });
 
-            // Use generateContentWithRetry for OCR
-            const ocrResult = await generateContentWithRetry(
-                gemini,
-                {
-                    contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...fileParts] }],
-                    safetySettings: relaxedSafetySettings // Apply safety settings for OCR
-                },
-                3, // maxRetries
-                (attempt, max) => sendSseMessage(controller, { status: `Retrying text extraction (${attempt}/${max})...` }) // onRetry callback
-            );
-            ocrText = ocrResult.response.text(); // Get text from result
+          // Use generateContentWithRetry for OCR
+          const ocrResult = await generateContentWithRetry(
+            gemini,
+            {
+              contents: [{ role: "user", parts: [{ text: ocrPrompt }, ...fileParts] }],
+              safetySettings: relaxedSafetySettings // Apply safety settings for OCR
+            },
+            3, // maxRetries
+            (attempt, max) => sendSseMessage(controller, { status: `Retrying text extraction (${attempt}/${max})...` }) // onRetry callback
+          );
+          ocrText = ocrResult.response.text(); // Get text from result
 
-            if (!ocrText) throw new Error("OCR process returned empty text after retries."); // Updated error message
-            sendSseMessage(controller, { status: 'Text extraction complete.' });
+          if (!ocrText) throw new Error("OCR process returned empty text after retries."); // Updated error message
+          sendSseMessage(controller, { status: 'Text extraction complete.' });
         } catch (ocrError) {
-            console.error("BoM SSE: Error during Gemini OCR call:", ocrError);
-            let userFriendlyError = "An unexpected error occurred during text extraction (OCR). Please try again.";
-            if (ocrError.message && ocrError.message.includes("SAFETY")) {
-                userFriendlyError = "Text extraction could not be completed due to content safety guidelines.";
-            } else if (ocrError.message && (ocrError.message.includes("Invalid content") || ocrError.message.includes("unsupported format"))) {
-                userFriendlyError = "There was an issue processing one or more files for text extraction. Please check the file formats.";
-            } else if (ocrError.message && ocrError.message.includes("RESOURCE_EXHAUSTED")) {
-                userFriendlyError = "The analysis service is busy during text extraction. Please try again shortly.";
-            }
-            sendSseMessage(controller, { message: userFriendlyError }, 'error');
-            throw ocrError; // Stop processing
+          console.error("BoM SSE: Error during Gemini OCR call:", ocrError);
+          let userFriendlyError = "An unexpected error occurred during text extraction (OCR). Please try again.";
+          if (ocrError.message && ocrError.message.includes("SAFETY")) {
+            userFriendlyError = "Text extraction could not be completed due to content safety guidelines.";
+          } else if (ocrError.message && (ocrError.message.includes("Invalid content") || ocrError.message.includes("unsupported format"))) {
+            userFriendlyError = "There was an issue processing one or more files for text extraction. Please check the file formats.";
+          } else if (ocrError.message && ocrError.message.includes("RESOURCE_EXHAUSTED")) {
+            userFriendlyError = "The analysis service is busy during text extraction. Please try again shortly.";
+          }
+          sendSseMessage(controller, { message: userFriendlyError }, 'error');
+          throw ocrError; // Stop processing
         }
 
         let bomReportHtml = '';
         // --- Step 2: Generate BoM Report as HTML with Error Handling ---
         try {
-            // Updated Prompt: Instruct AI to use both OCR text and original files
-            const bomPrompt = `Based on the following OCR text extracted from the provided engineering diagram files (Project: ${project.name}), and considering the content of the files themselves, generate a detailed Bill of Materials (BoM) in **HTML format**.
+          // Updated Prompt: Instruct AI to use both OCR text and original files
+          const bomPrompt = `Based on the following OCR text extracted from the provided engineering diagram files (Project: ${project.name}), and considering the content of the files themselves, generate a detailed Bill of Materials (BoM) in **HTML format**.
 
 **Instructions for HTML Structure:**
 1.  Present the BoM primarily as an HTML table (\`<table>\`) with a clear header row (\`<thead>\` containing \`<th>\` elements) and data rows (\`<tbody>\` containing \`<tr>\` with \`<td>\` elements).
@@ -261,42 +264,42 @@ ${ocrText}
 
 Generate the Bill of Materials report in HTML format now, using both the OCR text and the provided diagram files for context.`;
 
-            sendSseMessage(controller, { status: 'Generating Bill of Materials ...' });
+          sendSseMessage(controller, { status: 'Generating Bill of Materials ...' });
 
-            // Use generateContentWithRetry for BoM generation
-            const bomResult = await generateContentWithRetry(
-                gemini,
-                {
-                    contents: [{ role: "user", parts: [{ text: bomPrompt }, ...fileParts] }]
-                    // No special safety settings needed here by default
-                },
-                3, // maxRetries
-                (attempt, max) => sendSseMessage(controller, { status: `Retrying BoM generation (${attempt}/${max})...` }) // onRetry callback
-            );
-            bomReportHtml = bomResult.response.text(); // Get text from result
+          // Use generateContentWithRetry for BoM generation
+          const bomResult = await generateContentWithRetry(
+            gemini,
+            {
+              contents: [{ role: "user", parts: [{ text: bomPrompt }, ...fileParts] }]
+              // No special safety settings needed here by default
+            },
+            3, // maxRetries
+            (attempt, max) => sendSseMessage(controller, { status: `Retrying BoM generation (${attempt}/${max})...` }) // onRetry callback
+          );
+          bomReportHtml = bomResult.response.text(); // Get text from result
 
-            if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML after retries."); // Updated error message
+          if (!bomReportHtml) throw new Error("BoM generation process returned empty HTML after retries."); // Updated error message
 
         } catch (bomError) {
-            console.error("BoM SSE: Error during Gemini BoM generation call:", bomError);
-            let userFriendlyError = "An unexpected error occurred while generating the Bill of Materials. Please try again.";
-             if (bomError.message && bomError.message.includes("SAFETY")) {
-                userFriendlyError = "Bill of Materials generation could not be completed due to content safety guidelines.";
-            } else if (bomError.message && bomError.message.includes("RESOURCE_EXHAUSTED")) {
-                userFriendlyError = "The analysis service is busy during BoM generation. Please try again shortly.";
-            }
-            sendSseMessage(controller, { message: userFriendlyError }, 'error');
-            throw bomError; // Stop processing
+          console.error("BoM SSE: Error during Gemini BoM generation call:", bomError);
+          let userFriendlyError = "An unexpected error occurred while generating the Bill of Materials. Please try again.";
+          if (bomError.message && bomError.message.includes("SAFETY")) {
+            userFriendlyError = "Bill of Materials generation could not be completed due to content safety guidelines.";
+          } else if (bomError.message && bomError.message.includes("RESOURCE_EXHAUSTED")) {
+            userFriendlyError = "The analysis service is busy during BoM generation. Please try again shortly.";
+          }
+          sendSseMessage(controller, { message: userFriendlyError }, 'error');
+          throw bomError; // Stop processing
         }
 
         // --- Clean up Gemini's Markdown code fences ---
         console.log("Cleaning Gemini HTML output...");
         bomReportHtml = bomReportHtml.trim();
         if (bomReportHtml.startsWith('```html')) {
-            bomReportHtml = bomReportHtml.substring(7).trimStart();
+          bomReportHtml = bomReportHtml.substring(7).trimStart();
         }
         if (bomReportHtml.endsWith('```')) {
-            bomReportHtml = bomReportHtml.substring(0, bomReportHtml.length - 3).trimEnd();
+          bomReportHtml = bomReportHtml.substring(0, bomReportHtml.length - 3).trimEnd();
         }
         console.log("HTML output cleaned.");
         // --- End cleanup ---
@@ -400,41 +403,41 @@ Generate the Bill of Materials report in HTML format now, using both the OCR tex
 
         let pdfUrl = null;
         try {
-            console.log(`Calling HTML to PDF API: ${HTML_TO_PDF_API_URL}`);
-            // Use fetchWithRetry for PDF API call
-            const apiResponse = await fetchWithRetry(
-                HTML_TO_PDF_API_URL,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
-                },
-                3, // maxRetries
-                (attempt, max) => sendSseMessage(controller, { status: `Retrying PDF conversion (${attempt}/${max})...` }) // onRetry callback
-            );
+          console.log(`Calling HTML to PDF API: ${HTML_TO_PDF_API_URL}`);
+          // Use fetchWithRetry for PDF API call
+          const apiResponse = await fetchWithRetry(
+            HTML_TO_PDF_API_URL,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ html: fullHtml }), // Send the full styled HTML
+            },
+            3, // maxRetries
+            (attempt, max) => sendSseMessage(controller, { status: `Retrying PDF conversion (${attempt}/${max})...` }) // onRetry callback
+          );
 
-            // Reset status after retries finish (success or fail)
-            sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' });
+          // Reset status after retries finish (success or fail)
+          sendSseMessage(controller, { status: 'Applying styles and Preparing PDF...' });
 
-            if (!apiResponse.ok) {
-                const errorBody = await apiResponse.text();
-                console.error(`HTML to PDF API Error (${apiResponse.status}): ${errorBody}`);
-                throw new Error(`HTML to PDF conversion failed with status ${apiResponse.status}.`);
-            }
+          if (!apiResponse.ok) {
+            const errorBody = await apiResponse.text();
+            console.error(`HTML to PDF API Error (${apiResponse.status}): ${errorBody}`);
+            throw new Error(`HTML to PDF conversion failed with status ${apiResponse.status}.`);
+          }
 
-            const result = await apiResponse.json();
-            // --- UPDATED: Check for public_url instead of pdf_url ---
-            if (!result.public_url) { // Assuming success is implicit if public_url exists
-                 console.error("HTML to PDF API did not return public_url:", result);
-                 throw new Error("HTML to PDF conversion API call succeeded but response format was invalid (missing public_url).");
-            }
-            pdfUrl = result.public_url; // Use public_url
-            console.log("HTML to PDF API conversion successful. PDF URL:", pdfUrl);
-            sendSseMessage(controller, { status: 'PDF conversion complete.' });
+          const result = await apiResponse.json();
+          // --- UPDATED: Check for public_url instead of pdf_url ---
+          if (!result.public_url) { // Assuming success is implicit if public_url exists
+            console.error("HTML to PDF API did not return public_url:", result);
+            throw new Error("HTML to PDF conversion API call succeeded but response format was invalid (missing public_url).");
+          }
+          pdfUrl = result.public_url; // Use public_url
+          console.log("HTML to PDF API conversion successful. PDF URL:", pdfUrl);
+          sendSseMessage(controller, { status: 'PDF conversion complete.' });
 
         } catch (apiError) {
-             console.error("Error calling HTML to PDF API:", apiError);
-             throw new Error(`Failed to convert HTML to PDF: ${apiError.message}`);
+          console.error("Error calling HTML to PDF API:", apiError);
+          throw new Error(`Failed to convert HTML to PDF: ${apiError.message}`);
         }
         // --- End API Call ---
 
@@ -445,16 +448,16 @@ Generate the Bill of Materials report in HTML format now, using both the OCR tex
       } catch (error) {
         console.error(`BoM SSE Error for project ${projectId}:`, error);
         try {
-            sendSseMessage(controller, { message: error.message || 'An internal error occurred during BoM report generation.' }, 'error');
+          sendSseMessage(controller, { message: error.message || 'An internal error occurred during BoM report generation.' }, 'error');
         } catch (sseError) {
-            console.error("BoM SSE Error: Failed to send error message:", sseError);
+          console.error("BoM SSE Error: Failed to send error message:", sseError);
         }
       } finally {
         try {
-            controller.close();
-            console.log(`BoM SSE stream closed for project ${projectId}`);
+          controller.close();
+          console.log(`BoM SSE stream closed for project ${projectId}`);
         } catch (e) {
-             console.error(`BoM SSE Error: Failed to close stream for project ${projectId}:`, e);
+          console.error(`BoM SSE Error: Failed to close stream for project ${projectId}:`, e);
         }
       } // Closing brace for finally block
     }
@@ -467,15 +470,16 @@ Generate the Bill of Materials report in HTML format now, using both the OCR tex
       'Connection': 'keep-alive',
     },
   });
-// In the BOM report generation, add DXF-specific instructions
-const hasDxfFiles = diagrams.some(diag => diag.fileType === 'dxf');
+  // In the BOM report generation, add DXF-specific instructions
+  const hasDxfFiles = diagrams.some(diag => diag.fileType === 'dxf');
 
-let promptPrefix = `Generate a detailed Bill of Materials (BOM) based on the provided engineering diagrams.`;
+  let promptPrefix = `Generate a detailed Bill of Materials (BOM) based on the provided engineering diagrams.`;
 
-if (hasDxfFiles) {
-  promptPrefix += `\n\nFor DXF files, analyze the following:\n
+  if (hasDxfFiles) {
+    promptPrefix += `\n\nFor DXF files, analyze the following:\n
 1. Extract component information from text entities and block references\n
 2. Use dimension entities to determine quantities and measurements\n
 3. Identify standard parts based on geometric patterns (circles for fasteners, etc.)\n
 4. Group similar components based on layer information`;
-}};
+  }
+};

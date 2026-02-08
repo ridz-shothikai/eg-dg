@@ -22,11 +22,16 @@ const bucketName = GCS_BUCKET_NAME;
 let storage;
 let bucket;
 try {
-    storage = new Storage({ projectId: gcpProjectId, keyFilename: 'sa.json' });
-    bucket = storage.bucket(bucketName);
-    console.log("GCS initialized for download URL generation.");
+  const { GOOGLE_CLOUD_KEYFILE } = constants;
+  const storageOptions = { projectId: gcpProjectId };
+  if (GOOGLE_CLOUD_KEYFILE) {
+    storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;
+  }
+  storage = new Storage(storageOptions);
+  bucket = storage.bucket(bucketName);
+  console.log("GCS initialized for download URL generation.");
 } catch (e) {
-    console.error("Failed to initialize Google Cloud Storage for download URL:", e);
+  console.error("Failed to initialize Google Cloud Storage for download URL:", e);
 }
 
 // GET handler to generate a signed URL for a diagram
@@ -38,7 +43,7 @@ export async function GET(request, { params }) { // Use params from context
   }
 
   if (!bucket) {
-     return NextResponse.json({ message: 'GCS not initialized on server' }, { status: 500 });
+    return NextResponse.json({ message: 'GCS not initialized on server' }, { status: 500 });
   }
 
   try {
@@ -62,28 +67,28 @@ export async function GET(request, { params }) { // Use params from context
     const diagram = await Diagram.findById(diagramId).populate('project', '_id owner guestOwnerId'); // Populate necessary project fields
 
     if (!diagram || !diagram.project) {
-        return NextResponse.json({ message: 'Diagram or associated Project not found' }, { status: 404 });
+      return NextResponse.json({ message: 'Diagram or associated Project not found' }, { status: 404 });
     }
 
     // 2. Authorization check
     const project = diagram.project;
     if (userId) { // Authenticated user
-        if (!project.owner || project.owner.toString() !== userId) {
-            return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-        }
+      if (!project.owner || project.owner.toString() !== userId) {
+        return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+      }
     } else if (isGuest) { // Guest user
-        if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
-             return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
-        }
+      if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
+        return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
+      }
     } else {
-        // Should not happen due to initial check
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      // Should not happen due to initial check
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     // 3. Check if storagePath exists
     if (!diagram.storagePath || !diagram.storagePath.startsWith(`gs://${bucketName}/`)) {
-        console.error(`Invalid or missing storagePath for diagram ${diagramId}: ${diagram.storagePath}`);
-        return NextResponse.json({ message: 'File storage path is invalid or missing' }, { status: 500 });
+      console.error(`Invalid or missing storagePath for diagram ${diagramId}: ${diagram.storagePath}`);
+      return NextResponse.json({ message: 'File storage path is invalid or missing' }, { status: 500 });
     }
 
     // 4. Generate Signed URL

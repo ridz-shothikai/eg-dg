@@ -9,24 +9,20 @@ const { GCS_BUCKET_NAME, GOOGLE_CLOUD_PROJECT_ID } = constants;
 let storage = null;
 if (GOOGLE_CLOUD_PROJECT_ID && GCS_BUCKET_NAME) {
   try {
-    const keyFilePath = path.join(process.cwd(), "sa.json"); // Assuming sa.json is in root
-    storage = new Storage({
-      projectId: GOOGLE_CLOUD_PROJECT_ID,
-      keyFilename: keyFilePath,
-    });
-    console.log(
-      `generatePdfFromHtml: GCS Storage client initialized for bucket: ${GCS_BUCKET_NAME}`
-    );
+    const { GOOGLE_CLOUD_KEYFILE } = constants;
+    const storageOptions = { projectId: GOOGLE_CLOUD_PROJECT_ID };
+    if (GOOGLE_CLOUD_KEYFILE) {
+      storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;
+      console.log(`generatePdfFromHtml: GCS Storage client initialized using keyfile ${GOOGLE_CLOUD_KEYFILE} for bucket: ${GCS_BUCKET_NAME}`);
+    } else {
+      console.log(`generatePdfFromHtml: GCS Storage client initialized using default credentials (ADC) for bucket: ${GCS_BUCKET_NAME}`);
+    }
+    storage = new Storage(storageOptions);
   } catch (e) {
-    console.error(
-      "generatePdfFromHtml: Failed to initialize GCS Storage client:",
-      e
-    );
+    console.error("generatePdfFromHtml: Failed to initialize GCS Storage client:", e);
   }
 } else {
-  console.warn(
-    "generatePdfFromHtml: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS upload will fail."
-  );
+  console.warn("generatePdfFromHtml: GCS_BUCKET_NAME or GOOGLE_CLOUD_PROJECT_ID not set. GCS upload will fail.");
 }
 
 /**

@@ -9,10 +9,11 @@ import { Storage } from '@google-cloud/storage'; // Import Storage
 import { GOOGLE_CLOUD_PROJECT_ID, GCS_BUCKET_NAME, GOOGLE_CLOUD_KEYFILE } from '../../../../constants'; // Import constants
 
 // Initialize Google Cloud Storage
-const storage = new Storage({
-  projectId: GOOGLE_CLOUD_PROJECT_ID,
-  keyFilename: GOOGLE_CLOUD_KEYFILE,
-});
+const storageOptions = { projectId: GOOGLE_CLOUD_PROJECT_ID };
+if (GOOGLE_CLOUD_KEYFILE) {
+  storageOptions.keyFilename = GOOGLE_CLOUD_KEYFILE;
+}
+const storage = new Storage(storageOptions);
 const bucket = storage.bucket(GCS_BUCKET_NAME);
 
 // GET handler to fetch a specific project and its diagrams
@@ -51,18 +52,18 @@ export async function GET(request, context) { // Use context argument
 
     // Authorization check
     if (userId) { // Authenticated user
-        if (!project.owner || project.owner.toString() !== userId) {
-             console.log(`User ${userId} attempted to access project ${projectId} owned by ${project.owner?.toString()}`);
-             return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
-        }
+      if (!project.owner || project.owner.toString() !== userId) {
+        console.log(`User ${userId} attempted to access project ${projectId} owned by ${project.owner?.toString()}`);
+        return NextResponse.json({ message: 'Forbidden' }, { status: 403 });
+      }
     } else if (isGuest) { // Guest user
-        if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
-             console.log(`Project GET API: Guest ID mismatch: Header=${guestIdHeader}, Project=${project.guestOwnerId}`);
-             return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
-        }
+      if (!project.guestOwnerId || project.guestOwnerId !== guestIdHeader) {
+        console.log(`Project GET API: Guest ID mismatch: Header=${guestIdHeader}, Project=${project.guestOwnerId}`);
+        return NextResponse.json({ message: 'Forbidden (Guest Access Denied)' }, { status: 403 });
+      }
     } else {
-        // Should not happen due to initial check, but safeguard
-        return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+      // Should not happen due to initial check, but safeguard
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     // Fetch diagrams associated with the project
